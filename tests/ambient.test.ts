@@ -11,12 +11,6 @@ function makeMockElements() {
     setAttribute: vi.fn(),
     removeAttribute: vi.fn()
   }
-  const breakIndicator = {
-    classList: {
-      add: vi.fn(),
-      remove: vi.fn()
-    }
-  }
   const stage = {
     classList: {
       add: vi.fn(),
@@ -49,7 +43,6 @@ function makeMockElements() {
 
   return {
     container,
-    breakIndicator,
     stage,
     img,
     glowImg,
@@ -139,7 +132,7 @@ describe('AmbientPresenter', () => {
       durationMs: 200_000
     })
 
-    presenter.update(50_000, false)
+    presenter.update(50_000)
     expect(els.curTimeEl.textContent).toBe('0:50')
     expect(els.fillEl.style.width).toBe('25.00%')
     expect(els.thumbEl.style.left).toBe('25.00%')
@@ -163,18 +156,5 @@ describe('AmbientPresenter', () => {
     expect(els.curTimeEl.textContent).toBe('1:40')
     expect(els.fillEl.style.width).toBe('50.00%')
     expect(els.thumbEl.style.left).toBe('50.00%')
-  })
-
-  it('activates break indicator and dims stage during instrumental breaks', () => {
-    const els = makeMockElements()
-    const presenter = new AmbientPresenter(els)
-
-    presenter.update(10_000, true)
-    expect(els.breakIndicator.classList.add).toHaveBeenCalledWith('active')
-    expect(els.stage.classList.add).toHaveBeenCalledWith('ambient-break')
-
-    presenter.update(12_000, false)
-    expect(els.breakIndicator.classList.remove).toHaveBeenCalledWith('active')
-    expect(els.stage.classList.remove).toHaveBeenCalledWith('ambient-break')
   })
 })

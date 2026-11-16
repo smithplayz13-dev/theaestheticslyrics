@@ -33,7 +33,6 @@ export interface AmbientButtonTarget {
 
 export interface AmbientPresenterElements {
   container?: (AmbientDomTarget & { setAttribute?(name: string, val: string): void; removeAttribute?(name: string): void }) | null
-  breakIndicator?: AmbientDomTarget | null
   stage?: AmbientDomTarget | null
   img?: AmbientImageTarget | null
   glowImg?: AmbientImageTarget | null
@@ -135,7 +134,7 @@ export class AmbientPresenter {
     return targetMs
   }
 
-  update(songMs: number, isBreak: boolean): void {
+  update(songMs: number): void {
     if (!this.isSeeking) {
       const dur = this.durationMs > 0 ? this.durationMs : 0
       const pct = dur > 0 ? Math.max(0, Math.min(1, songMs / dur)) : 0
@@ -152,16 +151,6 @@ export class AmbientPresenter {
       }
       if (this.elements?.totalTimeEl) {
         this.elements.totalTimeEl.textContent = formatTime(dur)
-      }
-    }
-
-    if (this.elements?.breakIndicator && this.elements?.stage) {
-      if (isBreak) {
-        this.elements.breakIndicator.classList.add('active')
-        this.elements.stage.classList.add('ambient-break')
-      } else {
-        this.elements.breakIndicator.classList.remove('active')
-        this.elements.stage.classList.remove('ambient-break')
       }
     }
   }

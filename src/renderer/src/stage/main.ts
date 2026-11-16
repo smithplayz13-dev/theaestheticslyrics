@@ -6,7 +6,6 @@ import { SongClock } from './clock'
 import { LockClock } from './lock-clock'
 import { buildModel, msUntilNextWord, type LyricsModel } from './model'
 import { BackgroundManager } from './background'
-import { InstrumentalPresenter } from './instrumental'
 import { AmbientPresenter } from './ambient'
 import { createStyle } from './styles/registry'
 import type { StageStyle } from './styles/types'
@@ -21,39 +20,9 @@ const bgManager = new BackgroundManager({
   layerB: document.getElementById('stage-bg-b')!,
   root: document.documentElement
 })
-const presenter = new InstrumentalPresenter({
-  container: document.getElementById('instrumental-view')!,
-  img: document.getElementById('instrumental-img')! as HTMLImageElement,
-  glowImg: document.getElementById('instrumental-glow-img') as HTMLImageElement | null,
-  stage: root,
-  titleEl: document.getElementById('instrumental-title'),
-  artistEl: document.getElementById('instrumental-artist'),
-  metaContainer: document.getElementById('instrumental-meta'),
-  curTimeEl: document.getElementById('instrumental-time-cur'),
-  totalTimeEl: document.getElementById('instrumental-time-total'),
-  fillEl: document.getElementById('instrumental-track-fill'),
-  playPauseBtn: document.getElementById('instrumental-btn-play-pause'),
-  setPresentationState: (state) => {
-    document.body.dataset.presentation = state
-  }
-})
-
-document.getElementById('instrumental-btn-play-pause')?.addEventListener('click', (e) => {
-  e.stopPropagation()
-  api.controlMedia('play-pause')
-})
-document.getElementById('instrumental-btn-prev')?.addEventListener('click', (e) => {
-  e.stopPropagation()
-  api.controlMedia('previous')
-})
-document.getElementById('instrumental-btn-next')?.addEventListener('click', (e) => {
-  e.stopPropagation()
-  api.controlMedia('next')
-})
 
 const ambient = new AmbientPresenter({
   container: document.getElementById('ambient-view'),
-  breakIndicator: document.getElementById('ambient-break-indicator'),
   stage: root,
   img: document.getElementById('ambient-img') as HTMLImageElement | null,
   glowImg: document.getElementById('ambient-glow-img') as HTMLImageElement | null,
@@ -186,10 +155,6 @@ function applyState(state: StageState): void {
   palette = state.config.palette
   applyPaletteVars(palette)
   bgManager.setPalette(state.backgroundPalette)
-  presenter.setTrack(state.track)
-  presenter.setArtwork(state.artworkUrl ?? null)
-  presenter.setLyrics(state.lyrics, state.track?.durationMs ?? 0)
-  presenter.setPlaying(clock.playing)
   ambient.setTrack(state.track)
   ambient.setArtwork(state.artworkUrl ?? null)
   ambient.setPlaying(clock.playing)
@@ -228,15 +193,13 @@ const FRAME_RATE: Record<ShowOn, { busy: number; idle: number }> = {
 
 function render(songMs: number, wallMs: number): boolean {
   const isAmbient = ambient.isAmbient
-  const presentationBusy = isAmbient ? false : presenter.update(songMs)
-  const isBreak = presenter.isOverlayActive
-  ambient.update(songMs, isBreak)
+  ambient.update(songMs)
 
   const W = root.clientWidth || window.innerWidth
   const H = root.clientHeight || window.innerHeight
   const styleBusy = style?.frame({ songMs, wallMs, width: W, height: H }) ?? false
   if (mode === 'lock' && !isAmbient) lockClock.update(Date.now())
-  return presentationBusy || styleBusy || isBreak || ambient.seeking
+  return styleBusy || ambient.seeking
 }
 
 function loop(): void {
@@ -253,13 +216,11 @@ function loop(): void {
     return
   }
   // Wait out most of the frame budget, then align the next frame to vsync — but never
-  // sleep through the start of the next word or upcoming instrumental transition.
+  // sleep through the start of the next word.
   let wait = 1000 / fps - (performance.now() - started) - 8
   if (clock.playing) {
     const nextWord = model ? msUntilNextWord(model, songMs) : Number.POSITIVE_INFINITY
-    const nextTransition = presenter.msUntilNextTransition(songMs)
-    const nextEvent = Math.min(nextWord, nextTransition)
-    if (Number.isFinite(nextEvent)) wait = Math.min(wait, nextEvent - 12)
+    if (Number.isFinite(nextWord)) wait = Math.min(wait, nextWord - 12)
   }
   setTimeout(() => requestAnimationFrame(loop), Math.max(0, wait))
 }
@@ -284,7 +245,6 @@ api.onState((state) => {
 
 api.onAnchor((anchor) => {
   clock.setAnchor(anchor, performance.now(), Date.now())
-  presenter.setPlaying(anchor.playing)
   ambient.setPlaying(anchor.playing)
   startLoop()
 })
@@ -309,8 +269,8 @@ let travelled = 0
 let lastMove: { x: number; y: number; at: number } | null = null
 window.addEventListener('mousemove', (e) => {
   if (mode !== 'lock') return
-  if (ambient.isAmbient || presenter.isOverlayActive) {
-    // When Ambient Mode or the instrumental now-playing overlay is active, mouse interaction is expected!
+  if (ambient.isAmbient) {
+    // When Ambient Mode is active, mouse interaction is expected!
     // Do not dismiss the screen on mouse movements.
     travelled = 0
     lastMove = { x: e.screenX, y: e.screenY, at: e.timeStamp }
@@ -371,23 +331,6 @@ window.addEventListener('keydown', (e) => {
     api.dismiss({ kind: 'escape', detail: 'Esc' })
     return
   }
-  if (presenter.isOverlayActive) {
-    if (e.code === 'Space') {
-      e.preventDefault()
-      api.controlMedia('play-pause')
-      return
-    }
-    if (e.code === 'MediaTrackNext' || (e.ctrlKey && e.code === 'ArrowRight')) {
-      e.preventDefault()
-      api.controlMedia('next')
-      return
-    }
-    if (e.code === 'MediaTrackPrevious' || (e.ctrlKey && e.code === 'ArrowLeft')) {
-      e.preventDefault()
-      api.controlMedia('previous')
-      return
-    }
-  }
   api.dismiss({ kind: 'input', detail: `keydown key=${e.key} repeat=${e.repeat} trusted=${e.isTrusted}` })
 })
 
@@ -404,12 +347,6 @@ for (const type of ['mousedown', 'wheel', 'touchstart'] as const) {
       if (target && target.closest('#ambient-enter-btn')) {
         // Clicked the enter ambient button: do not dismiss!
         return
-      }
-      if (presenter.isOverlayActive) {
-        if (target && target.closest('#instrumental-container')) {
-          // User clicked inside the now-playing overlay / controls: do not dismiss!
-          return
-        }
       }
       api.dismiss({ kind: 'input', detail: `${type} trusted=${e.isTrusted}` })
     },
