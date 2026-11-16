@@ -179,6 +179,7 @@ function applyState(state: StageState): void {
   style.setMode(mode)
   style.setPalette(palette)
   startLoop()
+  render(clock.now(performance.now(), Date.now()), performance.now())
 }
 
 /**

@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { contrastRatio, hexToRgb, oklabToOklch, rgbToHex, rgbToOklab } from '../src/main/palette/color'
-import { extractPalette, paletteFromColors } from '../src/main/palette/extract'
+import { extractPalette, paletteFromBackground, paletteFromColors } from '../src/main/palette/extract'
 import { DEFAULT_COLORS } from '../src/shared/palette-defaults'
+import type { BackgroundPalette } from '../src/shared/types'
 
 /** Builds a BGRA bitmap from a per-pixel colour function. */
 function bitmap(w: number, h: number, color: (x: number, y: number) => [number, number, number, number?]): Uint8Array {
@@ -68,6 +69,20 @@ describe('extractPalette', () => {
     expect(extractPalette(grey, 32, 32)).toBeNull()
   })
 
+  it('extracts a high-contrast monochrome palette for greyscale art when allowMonochrome is true', () => {
+    const grey = bitmap(32, 32, (x, y) => {
+      const v = (x * 8 + y * 3) % 256
+      return [v, v, v]
+    })
+    const p = extractPalette(grey, 32, 32, { allowMonochrome: true })
+    expect(p).not.toBeNull()
+    expect(p!.lyric).toBe('#ffffff')
+    expect(p!.highlight).toBe('#ffffff')
+    expect(contrastRatio(p!.highlightText, p!.highlight)).toBeGreaterThanOrEqual(3)
+    expect(contrastRatio(p!.lyric, '#000000')).toBeGreaterThanOrEqual(4.5)
+    expect(contrastRatio(p!.secondary, '#000000')).toBeGreaterThan(4)
+  })
+
   it('ignores transparent pixels and tiny inputs', () => {
     expect(extractPalette(bitmap(32, 32, () => [255, 0, 0, 0]), 32, 32)).toBeNull()
     expect(extractPalette(bitmap(2, 2, () => [255, 0, 0]), 2, 2)).toBeNull()
@@ -96,5 +111,37 @@ describe('paletteFromColors', () => {
       const p = paletteFromColors({ ...DEFAULT_COLORS, highlight })
       expect(contrastRatio(p.highlightText, highlight)).toBeGreaterThanOrEqual(3)
     }
+  })
+})
+
+describe('paletteFromBackground', () => {
+  it('derives readable lyrics palette from background palette', () => {
+    const bg: BackgroundPalette = {
+      primary: '#14111d',
+      secondary: '#60a5fa',
+      tertiary: '#181412',
+      glow: '#38bdf8',
+      base: '#050508'
+    }
+    const p = paletteFromBackground(bg)
+    expect(contrastRatio(p.lyric, '#000000')).toBeGreaterThanOrEqual(4.5)
+    expect(contrastRatio(p.highlightText, p.highlight)).toBeGreaterThanOrEqual(3)
+    expect(contrastRatio(p.secondary, '#000000')).toBeGreaterThan(4)
+  })
+
+  it('handles dark or low-contrast background palettes gracefully', () => {
+    const bg: BackgroundPalette = {
+      primary: '#111111',
+      secondary: '#222222',
+      tertiary: '#181818',
+      glow: '#1a1a1a',
+      base: '#050505'
+    }
+    const p = paletteFromBackground(bg)
+    expect(p.lyric).toBe('#ffffff')
+    expect(p.highlight).toBe('#ffffff')
+    expect(p.highlightText).toBe('#0a0f1d')
+    expect(contrastRatio(p.lyric, '#000000')).toBeGreaterThanOrEqual(4.5)
+    expect(contrastRatio(p.highlightText, p.highlight)).toBeGreaterThanOrEqual(3)
   })
 })

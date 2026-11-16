@@ -1,5 +1,5 @@
 import { DEFAULT_HIGHLIGHT_TEXT } from '@shared/palette-defaults'
-import type { ColorRole, Palette } from '@shared/types'
+import type { BackgroundPalette, ColorRole, Palette } from '@shared/types'
 import { contrastRatio, hueDistance, oklabToOklch, oklchToHex, rgbToOklab, type Oklab } from './color'
 
 const DARK_TEXT = '#1c0a0f'
@@ -81,11 +81,22 @@ function boxColor(C: number, h: number): string {
   return hex
 }
 
+export interface ExtractPaletteOptions {
+  /** If true, returns a high-contrast monochrome palette for greyscale/black-and-white art instead of null. */
+  allowMonochrome?: boolean
+}
+
 /**
  * Album art (BGRA, as Electron's `nativeImage.toBitmap()` returns it on Windows) → the three
- * stage colours. Returns null for greyscale art so the caller keeps its current colours.
+ * stage colours. Returns null for greyscale art by default so callers can keep defaults or
+ * handle monochrome explicitly via options.allowMonochrome.
  */
-export function extractPalette(bgra: Uint8Array, width: number, height: number): Palette | null {
+export function extractPalette(
+  bgra: Uint8Array,
+  width: number,
+  height: number,
+  options: ExtractPaletteOptions = {}
+): Palette | null {
   if (width < 4 || height < 4 || bgra.length < width * height * 4) return null
 
   const step = Math.max(1, Math.floor(Math.max(width, height) / MAX_SIDE_SAMPLES))
@@ -103,7 +114,15 @@ export function extractPalette(bgra: Uint8Array, width: number, height: number):
     .filter((c) => c.count > 0)
     .map((c) => ({ ...oklabToOklch(c), share: c.count / points.length }))
   const vivid = colours.filter((c) => c.share >= MIN_SHARE && c.C >= MIN_CHROMA)
-  if (!vivid.length) return null
+  if (!vivid.length) {
+    if (!options.allowMonochrome) return null
+    return {
+      lyric: '#ffffff',
+      highlight: '#ffffff',
+      highlightText: '#0a0f1d',
+      secondary: '#94a3b8'
+    }
+  }
 
   const vibrancy = (c: { C: number; L: number; share: number }): number =>
     c.C * Math.sqrt(c.share) * (c.L < 0.12 || c.L > 0.96 ? 0.3 : 1)
@@ -118,4 +137,20 @@ export function extractPalette(bgra: Uint8Array, width: number, height: number):
   const secondary = oklchToHex(0.84, Math.min(0.05, Math.max(0.02, main.C * 0.4)), main.h)
 
   return paletteFromColors({ lyric, highlight, secondary })
+}
+
+/**
+ * Derives a stage lyrics Palette from a BackgroundPalette when album-art extraction
+ * is incomplete, pending, or greyscale. Guarantees WCAG AAA/AA readability against dark backgrounds.
+ */
+export function paletteFromBackground(bg: BackgroundPalette): Palette {
+  const glow = bg.glow
+  const isLightGlow = contrastRatio(glow, '#000000') >= 4.5
+  const highlight = glow && contrastRatio(glow, '#000000') >= 2.5 ? glow : '#ffffff'
+  const isLightHighlight = contrastRatio(highlight, '#000000') >= 4.5
+  const highlightText = isLightHighlight ? '#0a0f1d' : '#ffffff'
+  const lyric = isLightGlow ? glow : '#ffffff'
+  const secondary = bg.secondary && contrastRatio(bg.secondary, '#000000') >= 3.5 ? bg.secondary : '#94a3b8'
+
+  return { lyric, highlight, highlightText, secondary }
 }

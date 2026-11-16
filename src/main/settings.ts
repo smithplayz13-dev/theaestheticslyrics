@@ -69,7 +69,7 @@ export const DEFAULT_SETTINGS: Readonly<Settings> = Object.freeze({
   style: 'ship',
   showOn: 'lock',
   displayId: null,
-  autoSync: false,
+  autoSync: true,
   colors: Object.freeze({ ...DEFAULT_COLORS }),
   offsetMs: 0,
   idleMinutes: 2,

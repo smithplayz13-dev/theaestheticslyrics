@@ -15,7 +15,7 @@ import { LyricsService, type LyricsResult } from './lyrics/service'
 import { MUSIXMATCH_API_KEY } from './secrets'
 import { MediaWatcher, type ArtworkEvent } from './media/watcher'
 import { BackgroundPaletteCache, extractBackgroundPalette } from './palette/background'
-import { extractPalette, paletteFromColors } from './palette/extract'
+import { extractPalette, paletteFromBackground, paletteFromColors } from './palette/extract'
 import type { AppPaths } from './paths'
 import { PowerKeeper } from './power'
 import { ArtworkService } from './artwork/service'
@@ -64,6 +64,7 @@ export class AppController {
   private artworkUrl: string | null = null
   private providerArtworkUrl: string | null = null
   private readonly bgPaletteCache = new BackgroundPaletteCache()
+  private readonly albumPaletteCache = new Map<string, Palette>()
   private readonly artUrlCache = new Map<string, string>()
   private health: { ok: boolean; message?: string } = { ok: true }
   private hotkeyOk = false
@@ -195,8 +196,8 @@ export class AppController {
   private onTrack(track: TrackInfo | null): void {
     this.track = track
     this.timed = null
-    this.albumPalette = null
-    this.albumBgPalette = null
+    this.albumPalette = track ? (this.albumPaletteCache.get(track.key) ?? null) : null
+    this.albumBgPalette = track ? (this.bgPaletteCache.get(track.key) ?? null) : null
     this.artworkUrl = null
     this.providerArtworkUrl = null
     this.anchor = null
@@ -261,7 +262,8 @@ export class AppController {
 
         // Extract palette from the high-resolution artwork if not already cached
         const cachedBg = this.bgPaletteCache.get(track.key)
-        if (!cachedBg && res.url.startsWith('http')) {
+        const cachedPalette = this.albumPaletteCache.get(track.key)
+        if ((!cachedBg || !cachedPalette) && res.url.startsWith('http')) {
           void fetch(res.url)
             .then((r) => r.arrayBuffer())
             .then((buf) => {
@@ -271,9 +273,20 @@ export class AppController {
                 const small = image.resize({ width: 64, height: 64, quality: 'good' })
                 const { width, height } = small.getSize()
                 const bitmap = small.toBitmap()
-                this.albumPalette = extractPalette(bitmap, width, height)
-                this.albumBgPalette = extractBackgroundPalette(bitmap, width, height)
-                if (this.albumBgPalette) this.bgPaletteCache.set(track.key, this.albumBgPalette)
+                const extracted = extractPalette(bitmap, width, height, { allowMonochrome: true })
+                if (extracted) {
+                  this.albumPalette = extracted
+                  if (this.albumPaletteCache.size >= 20) {
+                    const first = this.albumPaletteCache.keys().next().value
+                    if (first !== undefined) this.albumPaletteCache.delete(first)
+                  }
+                  this.albumPaletteCache.set(track.key, extracted)
+                }
+                const extractedBg = extractBackgroundPalette(bitmap, width, height)
+                if (extractedBg) {
+                  this.albumBgPalette = extractedBg
+                  this.bgPaletteCache.set(track.key, extractedBg)
+                }
                 this.refresh()
               }
             })
@@ -313,6 +326,10 @@ export class AppController {
     if (cachedBg) {
       this.albumBgPalette = cachedBg
     }
+    const cachedPalette = this.albumPaletteCache.get(art.key)
+    if (cachedPalette) {
+      this.albumPalette = cachedPalette
+    }
 
     try {
       const image = nativeImage.createFromBuffer(art.data)
@@ -326,7 +343,15 @@ export class AppController {
       const small = image.resize({ width: 64, height: 64, quality: 'good' })
       const { width, height } = small.getSize()
       const bitmap = small.toBitmap()
-      this.albumPalette = extractPalette(bitmap, width, height)
+      const extracted = extractPalette(bitmap, width, height, { allowMonochrome: true })
+      if (extracted) {
+        this.albumPalette = extracted
+        if (this.albumPaletteCache.size >= 20) {
+          const first = this.albumPaletteCache.keys().next().value
+          if (first !== undefined) this.albumPaletteCache.delete(first)
+        }
+        this.albumPaletteCache.set(art.key, extracted)
+      }
       if (!cachedBg) {
         this.albumBgPalette = extractBackgroundPalette(bitmap, width, height)
         if (this.albumBgPalette) this.bgPaletteCache.set(art.key, this.albumBgPalette)
@@ -358,7 +383,12 @@ export class AppController {
 
   private palette(): Palette {
     const s = this.settings.get()
-    return s.autoSync && this.albumPalette ? this.albumPalette : paletteFromColors(s.colors)
+    const shouldSync = s.autoSync || Boolean(s.ambientMode)
+    if (shouldSync) {
+      if (this.albumPalette) return this.albumPalette
+      if (this.albumBgPalette) return paletteFromBackground(this.albumBgPalette)
+    }
+    return paletteFromColors(s.colors)
   }
 
   private colorsState(): ColorsState {
