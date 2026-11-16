@@ -20,6 +20,10 @@
       </svg>
     </button>
     <div id="ambient-view" class="ambient-view" aria-hidden="true">
+      <div class="ambient-glow" id="ambient-glow" aria-hidden="true">
+        <img class="ambient-glow-img" id="ambient-glow-img" alt="" />
+        <div class="ambient-glow-overlay"></div>
+      </div>
       <div class="ambient-header">
         <button class="ambient-mode-toggle btn-ambient-exit" id="ambient-exit-btn" type="button" aria-label="Exit Ambient Mode" title="Exit Ambient Mode (Esc)">
           <svg viewBox="0 0 24 24" class="control-icon" fill="currentColor">
@@ -34,9 +38,6 @@
 
         <div class="ambient-right" id="ambient-right">
           <div class="ambient-card" id="ambient-card">
-            <div class="ambient-glow" id="ambient-glow">
-              <img class="ambient-glow-img" id="ambient-glow-img" alt="" />
-            </div>
             <img class="ambient-img" id="ambient-img" alt="" />
           </div>
           <div class="ambient-meta" id="ambient-meta">
