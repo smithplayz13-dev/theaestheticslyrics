@@ -15,15 +15,46 @@
     </div>
     <div id="stage"></div>
     <div id="instrumental-view" class="instrumental-view" aria-hidden="true">
-      <div class="instrumental-card">
-        <div class="instrumental-glow" id="instrumental-glow">
-          <img class="instrumental-glow-img" id="instrumental-glow-img" alt="" />
+      <div class="instrumental-container" id="instrumental-container">
+        <div class="instrumental-card">
+          <div class="instrumental-glow" id="instrumental-glow">
+            <img class="instrumental-glow-img" id="instrumental-glow-img" alt="" />
+          </div>
+          <img class="instrumental-img" id="instrumental-img" alt="" />
         </div>
-        <img class="instrumental-img" id="instrumental-img" alt="" />
-      </div>
-      <div class="instrumental-meta" id="instrumental-meta" hidden>
-        <div class="instrumental-title" id="instrumental-title"></div>
-        <div class="instrumental-artist" id="instrumental-artist"></div>
+        <div class="instrumental-info" id="instrumental-info">
+          <div class="instrumental-meta" id="instrumental-meta" hidden>
+            <div class="instrumental-title" id="instrumental-title"></div>
+            <div class="instrumental-artist" id="instrumental-artist"></div>
+          </div>
+          <div class="instrumental-progress" id="instrumental-progress">
+            <span class="instrumental-time" id="instrumental-time-cur">0:00</span>
+            <div class="instrumental-track-bar" id="instrumental-track-bar">
+              <div class="instrumental-track-fill" id="instrumental-track-fill"></div>
+            </div>
+            <span class="instrumental-time" id="instrumental-time-total">0:00</span>
+          </div>
+          <div class="instrumental-controls" id="instrumental-controls">
+            <button class="instrumental-btn btn-prev" id="instrumental-btn-prev" type="button" aria-label="Previous track" title="Previous track">
+              <svg viewBox="0 0 24 24" class="control-icon" fill="currentColor">
+                <path d="M6 5a1 1 0 0 1 1 1v12a1 1 0 1 1-2 0V6a1 1 0 0 1 1-1zm11.2 1.35a1 1 0 0 1 1.6.8v9.7a1 1 0 0 1-1.6.8L9.6 13.05a1 1 0 0 1 0-1.7l7.6-4.8z"/>
+              </svg>
+            </button>
+            <button class="instrumental-btn btn-play-pause" id="instrumental-btn-play-pause" type="button" aria-label="Play or pause" title="Play / Pause" data-playing="false">
+              <svg viewBox="0 0 24 24" class="control-icon icon-play" fill="currentColor">
+                <path d="M8 5.14v13.72a1 1 0 0 0 1.5.86l11-6.86a1 1 0 0 0 0-1.72l-11-6.86A1 1 0 0 0 8 5.14z"/>
+              </svg>
+              <svg viewBox="0 0 24 24" class="control-icon icon-pause" fill="currentColor">
+                <path d="M6 5a2 2 0 0 1 2 2v10a2 2 0 1 1-4 0V7a2 2 0 0 1 2-2zm12 0a2 2 0 0 1 2 2v10a2 2 0 1 1-4 0V7a2 2 0 0 1 2-2z"/>
+              </svg>
+            </button>
+            <button class="instrumental-btn btn-next" id="instrumental-btn-next" type="button" aria-label="Next track" title="Next track">
+              <svg viewBox="0 0 24 24" class="control-icon" fill="currentColor">
+                <path d="M18 5a1 1 0 0 1 1 1v12a1 1 0 1 1-2 0V6a1 1 0 0 1 1-1zM6.8 6.35a1 1 0 0 0-1.6.8v9.7a1 1 0 0 0 1.6.8l7.6-4.6a1 1 0 0 0 0-1.7l-7.6-5z"/>
+              </svg>
+            </button>
+          </div>
+        </div>
       </div>
     </div>
     <script type="module" src="./src/stage/main.ts"></script>

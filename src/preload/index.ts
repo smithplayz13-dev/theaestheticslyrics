@@ -20,7 +20,8 @@ const api: LyricsAppApi = {
       ipcRenderer.send(IPC.stageDismiss, {
         kind: request.kind === 'escape' ? 'escape' : 'input',
         detail: String(request.detail).slice(0, 200)
-      })
+      }),
+    controlMedia: (action) => ipcRenderer.send(IPC.stageControlMedia, action)
   },
   colors: {
     get: () => ipcRenderer.invoke(IPC.colorsGet),

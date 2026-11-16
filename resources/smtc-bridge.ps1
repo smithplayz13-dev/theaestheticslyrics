@@ -1,4 +1,4 @@
-<#
+﻿<#
   theaestheticslyrics media bridge.
 
   Reads Windows' media sessions (System Media Transport Controls) and prints one
@@ -101,6 +101,58 @@ public static class ArtBridgeHelper
             finally { reader.Dispose(); }
         }
         finally { stream.Dispose(); }
+    }
+}
+
+public static class CommandBridgeHelper
+{
+    private static readonly System.Collections.Concurrent.ConcurrentQueue<string> queue = new System.Collections.Concurrent.ConcurrentQueue<string>();
+    private static System.Threading.Thread readerThread;
+
+    [DllImport("user32.dll")]
+    public static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, UIntPtr dwExtraInfo);
+
+    public const byte VK_MEDIA_NEXT_TRACK = 0xB0;
+    public const byte VK_MEDIA_PREV_TRACK = 0xB1;
+    public const byte VK_MEDIA_PLAY_PAUSE = 0xB3;
+
+    public static void SendMediaKey(byte vk)
+    {
+        keybd_event(vk, 0, 0, UIntPtr.Zero);
+        keybd_event(vk, 0, 2, UIntPtr.Zero);
+    }
+
+    public static void StartReader()
+    {
+        if (readerThread != null) return;
+        readerThread = new System.Threading.Thread(() =>
+        {
+            try
+            {
+                using (var reader = new System.IO.StreamReader(Console.OpenStandardInput(), System.Text.Encoding.UTF8))
+                {
+                    string line;
+                    while ((line = reader.ReadLine()) != null)
+                    {
+                        if (!string.IsNullOrWhiteSpace(line))
+                        {
+                            queue.Enqueue(line.Trim());
+                        }
+                    }
+                }
+            }
+            catch {}
+        })
+        {
+            IsBackground = true
+        };
+        readerThread.Start();
+    }
+
+    public static string DequeueCommand()
+    {
+        string cmd;
+        return queue.TryDequeue(out cmd) ? cmd : null;
     }
 }
 '@
@@ -210,6 +262,7 @@ function Compile-ArtHelper {
     }
     Add-Type -Path $dllPath
     $script:ArtHelper = [ArtBridgeHelper]
+    try { [CommandBridgeHelper]::StartReader() } catch { }
     return $true
   } catch {
     $script:ArtHelperReason = [string]$_.Exception.Message
@@ -244,8 +297,63 @@ $lastJson = ''
 $lastEmit = [DateTime]::MinValue
 $lastError = [DateTime]::MinValue
 
+function Invoke-MediaControl($action, $targetApp) {
+  $target = $null
+  if ($targetApp) {
+    foreach ($s in $manager.GetSessions()) {
+      if ($s.SourceAppUserModelId -eq $targetApp) { $target = $s; break }
+    }
+  }
+  if (-not $target) {
+    try { $target = $manager.GetCurrentSession() } catch { }
+  }
+  if (-not $target) {
+    $sessions = @($manager.GetSessions())
+    if ($sessions.Count -gt 0) { $target = $sessions[0] }
+  }
+
+  $handled = $false
+  if ($target) {
+    try {
+      switch ($action) {
+        'play-pause' { $handled = Await ($target.TryTogglePlayPauseAsync()) ([bool]) 1500 }
+        'play'       { $handled = Await ($target.TryPlayAsync()) ([bool]) 1500 }
+        'pause'      { $handled = Await ($target.TryPauseAsync()) ([bool]) 1500 }
+        'next'       { $handled = Await ($target.TrySkipNextAsync()) ([bool]) 1500 }
+        'previous'   { $handled = Await ($target.TrySkipPreviousAsync()) ([bool]) 1500 }
+      }
+    } catch {
+      $handled = $false
+    }
+  }
+
+  if (-not $handled) {
+    try {
+      switch ($action) {
+        'play-pause' { [CommandBridgeHelper]::SendMediaKey([CommandBridgeHelper]::VK_MEDIA_PLAY_PAUSE) }
+        'play'       { [CommandBridgeHelper]::SendMediaKey([CommandBridgeHelper]::VK_MEDIA_PLAY_PAUSE) }
+        'pause'      { [CommandBridgeHelper]::SendMediaKey([CommandBridgeHelper]::VK_MEDIA_PLAY_PAUSE) }
+        'next'       { [CommandBridgeHelper]::SendMediaKey([CommandBridgeHelper]::VK_MEDIA_NEXT_TRACK) }
+        'previous'   { [CommandBridgeHelper]::SendMediaKey([CommandBridgeHelper]::VK_MEDIA_PREV_TRACK) }
+      }
+    } catch { }
+  }
+}
+
 while ($true) {
   $tick++
+  try {
+    while ($null -ne ($rawCmd = [CommandBridgeHelper]::DequeueCommand())) {
+      try {
+        $cmdObj = ConvertFrom-Json -InputObject $rawCmd
+        if ($cmdObj.action) {
+          Invoke-MediaControl $cmdObj.action $cmdObj.app
+        }
+      } catch {
+        Emit @{ type = 'error'; message = "control: failed to handle command ($($_.Exception.Message))" }
+      }
+    }
+  } catch { }
   try {
     if ($ParentPid -gt 0 -and ($tick % 8) -eq 0) {
       try { $null = [System.Diagnostics.Process]::GetProcessById($ParentPid) } catch { exit 0 }

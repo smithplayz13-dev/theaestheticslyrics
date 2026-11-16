@@ -28,9 +28,26 @@ const presenter = new InstrumentalPresenter({
   titleEl: document.getElementById('instrumental-title'),
   artistEl: document.getElementById('instrumental-artist'),
   metaContainer: document.getElementById('instrumental-meta'),
+  curTimeEl: document.getElementById('instrumental-time-cur'),
+  totalTimeEl: document.getElementById('instrumental-time-total'),
+  fillEl: document.getElementById('instrumental-track-fill'),
+  playPauseBtn: document.getElementById('instrumental-btn-play-pause'),
   setPresentationState: (state) => {
     document.body.dataset.presentation = state
   }
+})
+
+document.getElementById('instrumental-btn-play-pause')?.addEventListener('click', (e) => {
+  e.stopPropagation()
+  api.controlMedia('play-pause')
+})
+document.getElementById('instrumental-btn-prev')?.addEventListener('click', (e) => {
+  e.stopPropagation()
+  api.controlMedia('previous')
+})
+document.getElementById('instrumental-btn-next')?.addEventListener('click', (e) => {
+  e.stopPropagation()
+  api.controlMedia('next')
 })
 
 let style: StageStyle | null = null
@@ -77,6 +94,7 @@ function applyState(state: StageState): void {
   presenter.setTrack(state.track)
   presenter.setArtwork(state.artworkUrl ?? null)
   presenter.setLyrics(state.lyrics, state.track?.durationMs ?? 0)
+  presenter.setPlaying(clock.playing)
   clock.setOffset(state.config.offsetMs)
 
   const sig = signature(state)
@@ -162,6 +180,7 @@ api.onState((state) => {
 
 api.onAnchor((anchor) => {
   clock.setAnchor(anchor, performance.now(), Date.now())
+  presenter.setPlaying(anchor.playing)
   startLoop()
 })
 
@@ -185,6 +204,13 @@ let travelled = 0
 let lastMove: { x: number; y: number; at: number } | null = null
 window.addEventListener('mousemove', (e) => {
   if (mode !== 'lock') return
+  if (presenter.isOverlayActive) {
+    // When the instrumental now-playing overlay is active, mouse interaction is expected!
+    // Do not dismiss the screen on mouse movements.
+    travelled = 0
+    lastMove = { x: e.screenX, y: e.screenY, at: e.timeStamp }
+    return
+  }
   const from = lastMove
   if (from && e.timeStamp - from.at < 600) travelled += Math.hypot(e.screenX - from.x, e.screenY - from.y)
   else travelled = 0
@@ -199,16 +225,44 @@ window.addEventListener('mousemove', (e) => {
 })
 window.addEventListener('keydown', (e) => {
   if (mode !== 'lock') return
-  if (e.key === 'Escape') api.dismiss({ kind: 'escape', detail: 'Esc' })
-  else api.dismiss({ kind: 'input', detail: `keydown key=${e.key} repeat=${e.repeat} trusted=${e.isTrusted}` })
+  if (e.key === 'Escape') {
+    api.dismiss({ kind: 'escape', detail: 'Esc' })
+    return
+  }
+  if (presenter.isOverlayActive) {
+    if (e.code === 'Space') {
+      e.preventDefault()
+      api.controlMedia('play-pause')
+      return
+    }
+    if (e.code === 'MediaTrackNext' || (e.ctrlKey && e.code === 'ArrowRight')) {
+      e.preventDefault()
+      api.controlMedia('next')
+      return
+    }
+    if (e.code === 'MediaTrackPrevious' || (e.ctrlKey && e.code === 'ArrowLeft')) {
+      e.preventDefault()
+      api.controlMedia('previous')
+      return
+    }
+  }
+  api.dismiss({ kind: 'input', detail: `keydown key=${e.key} repeat=${e.repeat} trusted=${e.isTrusted}` })
 })
 for (const type of ['mousedown', 'wheel', 'touchstart'] as const) {
   window.addEventListener(
     type,
     (e) => {
-      if (mode === 'lock') api.dismiss({ kind: 'input', detail: `${type} trusted=${e.isTrusted}` })
+      if (mode !== 'lock') return
+      if (presenter.isOverlayActive) {
+        const target = e.target as HTMLElement | null
+        if (target && target.closest('#instrumental-container')) {
+          // User clicked inside the now-playing overlay / controls: do not dismiss!
+          return
+        }
+      }
+      api.dismiss({ kind: 'input', detail: `${type} trusted=${e.isTrusted}` })
     },
-    { passive: true }
+    { passive: false }
   )
 }
 

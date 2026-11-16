@@ -107,7 +107,20 @@ export interface InstrumentalImageTarget {
 
 export interface InstrumentalTextTarget {
   textContent: string | null
-  hidden: boolean | string
+  hidden?: boolean | string
+}
+
+export interface InstrumentalStyleTarget {
+  style: {
+    width?: string
+  }
+}
+
+export interface InstrumentalButtonTarget {
+  dataset?: {
+    playing?: string
+  }
+  setAttribute?(qualifiedName: string, value: string): void
 }
 
 export interface InstrumentalPresenterElements {
@@ -118,7 +131,19 @@ export interface InstrumentalPresenterElements {
   titleEl?: InstrumentalTextTarget | null
   artistEl?: InstrumentalTextTarget | null
   metaContainer?: InstrumentalDomTarget | null
+  fillEl?: InstrumentalStyleTarget | null
+  curTimeEl?: InstrumentalTextTarget | null
+  totalTimeEl?: InstrumentalTextTarget | null
+  playPauseBtn?: InstrumentalButtonTarget | null
   setPresentationState?: (state: PresentationState) => void
+}
+
+export function formatTime(ms: number): string {
+  if (!Number.isFinite(ms) || ms <= 0) return '0:00'
+  const totalSec = Math.floor(ms / 1000)
+  const minutes = Math.floor(totalSec / 60)
+  const seconds = totalSec % 60
+  return `${minutes}:${seconds < 10 ? '0' : ''}${seconds}`
 }
 
 /**
@@ -129,6 +154,7 @@ export class InstrumentalPresenter {
   private state: PresentationState = 'lyrics'
   private artworkUrl: string | null = null
   private track: TrackInfo | null = null
+  private isPlaying = false
   private lastAppliedState: PresentationState | null = null
 
   constructor(private readonly elements?: InstrumentalPresenterElements) {}
@@ -143,6 +169,24 @@ export class InstrumentalPresenter {
 
   get currentTrack(): TrackInfo | null {
     return this.track
+  }
+
+  get playing(): boolean {
+    return this.isPlaying
+  }
+
+  get isOverlayActive(): boolean {
+    return this.state === 'artwork' || this.state === 'transitioning-to-artwork'
+  }
+
+  setPlaying(playing: boolean): void {
+    this.isPlaying = playing
+    if (this.elements?.playPauseBtn) {
+      if (this.elements.playPauseBtn.dataset) {
+        this.elements.playPauseBtn.dataset.playing = String(playing)
+      }
+      this.elements.playPauseBtn.setAttribute?.('data-playing', String(playing))
+    }
   }
 
   setLyrics(lyrics: TimedLyrics | null, durationMs = 0): void {
@@ -191,9 +235,25 @@ export class InstrumentalPresenter {
     const nextState = evaluatePresentationState(songMs, this.gaps, hasArtwork)
     this.state = nextState
 
-    if (this.elements && this.state !== this.lastAppliedState) {
-      this.lastAppliedState = this.state
-      this.applyDom(this.state)
+    if (this.elements) {
+      if (this.state !== this.lastAppliedState) {
+        this.lastAppliedState = this.state
+        this.applyDom(this.state)
+      }
+
+      const isArt = this.state === 'artwork' || this.state === 'transitioning-to-artwork'
+      if (isArt) {
+        if (this.elements.curTimeEl) {
+          this.elements.curTimeEl.textContent = formatTime(songMs)
+        }
+        if (this.elements.totalTimeEl && this.track?.durationMs) {
+          this.elements.totalTimeEl.textContent = formatTime(this.track.durationMs)
+        }
+        if (this.elements.fillEl && this.track && this.track.durationMs > 0) {
+          const pct = Math.min(100, Math.max(0, (songMs / this.track.durationMs) * 100))
+          this.elements.fillEl.style.width = `${pct.toFixed(2)}%`
+        }
+      }
     }
 
     return this.state === 'transitioning-to-artwork' || this.state === 'transitioning-to-lyrics'

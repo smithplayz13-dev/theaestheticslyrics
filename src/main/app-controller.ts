@@ -109,7 +109,8 @@ export class AppController {
     this.stage = new StageController({
       log: this.log,
       settings: () => this.settings.get(),
-      lockWorkstation: () => lockWorkstation(this.log)
+      lockWorkstation: () => lockWorkstation(this.log),
+      controlMedia: (action) => this.watcher.controlMedia(action)
     })
     this.colors = new ColorsWindow({
       log: this.log,

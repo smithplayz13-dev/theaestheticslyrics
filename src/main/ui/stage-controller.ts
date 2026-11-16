@@ -31,6 +31,7 @@ export interface StageControllerDeps {
   settings: () => Settings
   lockWorkstation: () => void
   onLockChange?: (open: boolean) => void
+  controlMedia?: (action: 'play-pause' | 'play' | 'pause' | 'next' | 'previous') => void
 }
 
 /** An idle-opened lyrics screen closes this long after the music stops. */
@@ -60,6 +61,7 @@ export class StageController {
 
   constructor(private readonly deps: StageControllerDeps) {
     ipcMain.on(IPC.stageDismiss, this.onDismiss)
+    ipcMain.on(IPC.stageControlMedia, this.onControlMedia)
     powerMonitor.on('lock-screen', this.onOsLock)
     powerMonitor.on('unlock-screen', this.onOsUnlock)
     screen.on('display-added', this.onDisplaysChanged)
@@ -220,6 +222,7 @@ export class StageController {
   dispose(): void {
     clearInterval(this.timer)
     ipcMain.removeListener(IPC.stageDismiss, this.onDismiss)
+    ipcMain.removeListener(IPC.stageControlMedia, this.onControlMedia)
     powerMonitor.removeListener('lock-screen', this.onOsLock)
     powerMonitor.removeListener('unlock-screen', this.onOsUnlock)
     screen.removeListener('display-added', this.onDisplaysChanged)
@@ -426,6 +429,18 @@ export class StageController {
     else if (this.graceLogged !== session) {
       this.graceLogged = session
       this.deps.log(`stage: ignored input during grace period (${what})`)
+    }
+  }
+
+  private readonly onControlMedia = (_event: IpcMainEvent, action: unknown): void => {
+    if (
+      action === 'play-pause' ||
+      action === 'play' ||
+      action === 'pause' ||
+      action === 'next' ||
+      action === 'previous'
+    ) {
+      this.deps.controlMedia?.(action)
     }
   }
 

@@ -7,6 +7,7 @@ export const IPC = {
   stageSession: 'stage:session',
   stageSnapshot: 'stage:snapshot',
   stageSnapshotDone: 'stage:snapshot-done',
+  stageControlMedia: 'stage:control-media',
   colorsGet: 'colors:get',
   colorsSet: 'colors:set',
   colorsAutoSync: 'colors:auto-sync',
@@ -65,6 +66,8 @@ export interface StageApi {
   snapshotDone(id: number): void
   /** Input on the lyrics screen; the main process decides whether it closes the screen. */
   dismiss(request: DismissRequest): void
+  /** Controls playback for the currently followed media player session. */
+  controlMedia(action: 'play-pause' | 'play' | 'pause' | 'next' | 'previous'): void
 }
 
 export interface ColorsApi {

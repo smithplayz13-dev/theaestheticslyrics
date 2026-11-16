@@ -81,6 +81,20 @@ export class MediaWatcher extends EventEmitter<WatcherEvents> {
     return art ? { key, ...art } : null
   }
 
+  controlMedia(action: 'play-pause' | 'play' | 'pause' | 'next' | 'previous'): void {
+    if (this.child && !this.child.killed && this.child.stdin?.writable) {
+      const payload = JSON.stringify({
+        type: 'command',
+        action,
+        app: this.track?.app ?? null
+      })
+      this.child.stdin.write(`${payload}\n`)
+      this.opts.log(`media: sent control action "${action}" to bridge`)
+    } else {
+      this.opts.log(`media: bridge stdin unavailable for control action "${action}"`)
+    }
+  }
+
   start(): void {
     if (!this.stopped) return
     this.stopped = false
@@ -118,7 +132,7 @@ export class MediaWatcher extends EventEmitter<WatcherEvents> {
     ]
     let child: ChildProcess
     try {
-      child = spawn(exe, args, { windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] })
+      child = spawn(exe, args, { windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] })
     } catch (err) {
       this.opts.log(`bridge: spawn failed (${String(err)})`)
       this.scheduleRestart()

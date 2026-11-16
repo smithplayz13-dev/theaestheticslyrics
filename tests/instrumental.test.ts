@@ -3,6 +3,7 @@ import type { TimedLyrics } from '../src/shared/types'
 import {
   evaluatePresentationState,
   findInstrumentalGaps,
+  formatTime,
   InstrumentalPresenter,
   INSTRUMENTAL_MIN_GAP_MS,
   RETURN_TO_LYRICS_LEAD_MS
@@ -113,6 +114,17 @@ describe('findInstrumentalGaps', () => {
     expect(gaps).toHaveLength(2)
     expect(gaps[0]).toEqual({ start: 0, end: 10_000, duration: 10_000 })
     expect(gaps[1]).toEqual({ start: 14_000, end: 26_000, duration: 12_000 })
+  })
+})
+
+describe('formatTime', () => {
+  it('formats milliseconds to m:ss cleanly', () => {
+    expect(formatTime(0)).toBe('0:00')
+    expect(formatTime(-100)).toBe('0:00')
+    expect(formatTime(5000)).toBe('0:05')
+    expect(formatTime(65_000)).toBe('1:05')
+    expect(formatTime(214_000)).toBe('3:34')
+    expect(formatTime(354_000)).toBe('5:54')
   })
 })
 
@@ -295,6 +307,62 @@ describe('InstrumentalPresenter', () => {
     expect(titleTarget.hidden).toBe(true)
     expect(artistTarget.hidden).toBe(true)
     expect(metaContainer.hidden).toBe(true)
+  })
+
+  it('updates playback controls state (playing/pause) and track progress display', () => {
+    const fillTarget = { style: { width: '0%' } }
+    const curTimeTarget = { textContent: '0:00' }
+    const totalTimeTarget = { textContent: '0:00' }
+    const playPauseBtn = {
+      dataset: { playing: 'false' },
+      setAttribute: (name: string, val: string) => {
+        if (name === 'data-playing') playPauseBtn.dataset.playing = val
+      }
+    }
+
+    const presenter = new InstrumentalPresenter({
+      container: { classList: { add: () => {}, remove: () => {} } },
+      stage: { classList: { add: () => {}, remove: () => {} } },
+      img: { src: '', removeAttribute: () => {} },
+      fillEl: fillTarget,
+      curTimeEl: curTimeTarget,
+      totalTimeEl: totalTimeTarget,
+      playPauseBtn
+    })
+
+    presenter.setLyrics(sampleLyrics, 100_000)
+    presenter.setArtwork('data:image/jpeg;base64,...')
+    presenter.setTrack({
+      key: 'test:song',
+      title: 'Comfortably Numb',
+      artist: 'Pink Floyd',
+      album: 'The Wall',
+      durationMs: 100_000,
+      app: 'spotify'
+    })
+
+    // Test setPlaying
+    expect(presenter.playing).toBe(false)
+    presenter.setPlaying(true)
+    expect(presenter.playing).toBe(true)
+    expect(playPauseBtn.dataset.playing).toBe('true')
+
+    // At t=6000 (inside intro break 0..12000): isOverlayActive should be true
+    presenter.update(6000)
+    expect(presenter.isOverlayActive).toBe(true)
+    expect(curTimeTarget.textContent).toBe('0:06')
+    expect(totalTimeTarget.textContent).toBe('1:40')
+    expect(fillTarget.style.width).toBe('6.00%')
+
+    // Mid-song solo at t=45000 (45%)
+    presenter.update(45_000)
+    expect(presenter.isOverlayActive).toBe(true)
+    expect(curTimeTarget.textContent).toBe('0:45')
+    expect(fillTarget.style.width).toBe('45.00%')
+
+    // During lyrics playback at t=14000
+    presenter.update(14_000)
+    expect(presenter.isOverlayActive).toBe(false)
   })
 })
 
