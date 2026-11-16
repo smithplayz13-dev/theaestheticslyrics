@@ -1,7 +1,7 @@
 import { app, globalShortcut, nativeImage, screen, shell } from 'electron'
 import type { ColorsState } from '@shared/ipc'
 import { DEFAULT_COLORS } from '@shared/palette-defaults'
-import type { LyricsStatus, Palette, PlaybackAnchor, TimedLyrics, TrackInfo } from '@shared/types'
+import type { BackgroundPalette, LyricsStatus, Palette, PlaybackAnchor, TimedLyrics, TrackInfo } from '@shared/types'
 import { lockWorkstation } from './lock'
 import type { Log } from './logger'
 import { BetterLyricsClient } from './lyrics/betterlyrics'
@@ -14,6 +14,7 @@ import { NeteaseClient } from './lyrics/netease'
 import { LyricsService, type LyricsResult } from './lyrics/service'
 import { MUSIXMATCH_API_KEY } from './secrets'
 import { MediaWatcher, type ArtworkEvent } from './media/watcher'
+import { BackgroundPaletteCache, extractBackgroundPalette } from './palette/background'
 import { extractPalette, paletteFromColors } from './palette/extract'
 import type { AppPaths } from './paths'
 import { PowerKeeper } from './power'
@@ -58,6 +59,10 @@ export class AppController {
   private timed: TimedLyrics | null = null
   private status: LyricsStatus = 'idle'
   private albumPalette: Palette | null = null
+  private albumBgPalette: BackgroundPalette | null = null
+  private artworkUrl: string | null = null
+  private readonly bgPaletteCache = new BackgroundPaletteCache()
+  private readonly artUrlCache = new Map<string, string>()
   private health: { ok: boolean; message?: string } = { ok: true }
   private hotkeyOk = false
   private lookupToken = 0
@@ -184,6 +189,8 @@ export class AppController {
     this.track = track
     this.timed = null
     this.albumPalette = null
+    this.albumBgPalette = null
+    this.artworkUrl = null
     this.anchor = null
     const token = ++this.lookupToken
     this.status = track?.title ? 'searching' : 'idle'
@@ -232,23 +239,45 @@ export class AppController {
 
   private onArtwork(art: ArtworkEvent): void {
     if (!this.track || art.key !== this.track.key) return
+    let dataUrl = this.artUrlCache.get(art.key)
+    if (!dataUrl) {
+      dataUrl = `data:${art.mime || 'image/jpeg'};base64,${art.data.toString('base64')}`
+      if (this.artUrlCache.size >= 20) {
+        const first = this.artUrlCache.keys().next().value
+        if (first !== undefined) this.artUrlCache.delete(first)
+      }
+      this.artUrlCache.set(art.key, dataUrl)
+    }
+    this.artworkUrl = dataUrl
+
+    const cachedBg = this.bgPaletteCache.get(art.key)
+    if (cachedBg) {
+      this.albumBgPalette = cachedBg
+    }
+
     try {
       const image = nativeImage.createFromBuffer(art.data)
       if (image.isEmpty()) {
         // nativeImage decodes PNG and JPEG only; e.g. WebP arrives as an empty image.
         // A diagnostic here replaces the old silent drop so an art regression is visible.
         this.log(`palette: album art bytes=${art.data.length} mime=${art.mime || 'unknown'} decoded to an empty image (unsupported format?)`)
+        this.refresh()
         return
       }
       const small = image.resize({ width: 64, height: 64, quality: 'good' })
       const { width, height } = small.getSize()
-      this.albumPalette = extractPalette(small.toBitmap(), width, height)
+      const bitmap = small.toBitmap()
+      this.albumPalette = extractPalette(bitmap, width, height)
+      if (!cachedBg) {
+        this.albumBgPalette = extractBackgroundPalette(bitmap, width, height)
+        if (this.albumBgPalette) this.bgPaletteCache.set(art.key, this.albumBgPalette)
+      }
     } catch (err) {
       this.log(`palette: could not read album art (${String(err)})`)
+      this.refresh()
       return
     }
-    if (this.settings.get().autoSync) this.refresh()
-    else this.colors.push(this.colorsState())
+    this.refresh()
   }
 
   private onSettings(s: Settings): void {
@@ -283,7 +312,15 @@ export class AppController {
     const playing = this.anchor?.playing ?? false
     const hasLyrics = this.status === 'found' && this.timed !== null
     this.stage.update(
-      { track: this.track, lyrics: hasLyrics ? this.timed : null, style: s.style, palette: this.palette(), offsetMs: s.offsetMs },
+      {
+        track: this.track,
+        lyrics: hasLyrics ? this.timed : null,
+        style: s.style,
+        palette: this.palette(),
+        offsetMs: s.offsetMs,
+        artworkUrl: this.artworkUrl,
+        backgroundPalette: this.albumBgPalette
+      },
       { playing, hasLyrics }
     )
     this.power.update(playing && hasLyrics)

@@ -5,6 +5,8 @@ import type { Palette, ShowOn, StyleId } from '@shared/types'
 import { SongClock } from './clock'
 import { LockClock } from './lock-clock'
 import { buildModel, msUntilNextWord, type LyricsModel } from './model'
+import { BackgroundManager } from './background'
+import { InstrumentalPresenter } from './instrumental'
 import { createStyle } from './styles/registry'
 import type { StageStyle } from './styles/types'
 
@@ -12,6 +14,21 @@ const api = window.lyricsApp.stage
 const root = document.getElementById('stage')!
 const clock = new SongClock()
 const lockClock = new LockClock(document.body)
+
+const bgManager = new BackgroundManager({
+  layerA: document.getElementById('stage-bg-a')!,
+  layerB: document.getElementById('stage-bg-b')!,
+  root: document.documentElement
+})
+const presenter = new InstrumentalPresenter({
+  container: document.getElementById('instrumental-view')!,
+  img: document.getElementById('instrumental-img')! as HTMLImageElement,
+  glowImg: document.getElementById('instrumental-glow-img') as HTMLImageElement | null,
+  stage: root,
+  setPresentationState: (state) => {
+    document.body.dataset.presentation = state
+  }
+})
 
 let style: StageStyle | null = null
 let styleId: StyleId | null = null
@@ -53,6 +70,9 @@ function applyState(state: StageState): void {
   lockClock.setVisible(mode === 'lock')
   palette = state.config.palette
   applyPaletteVars(palette)
+  bgManager.setPalette(state.backgroundPalette)
+  presenter.setArtwork(state.artworkUrl ?? null)
+  presenter.setLyrics(state.lyrics, state.track?.durationMs ?? 0)
   clock.setOffset(state.config.offsetMs)
 
   const sig = signature(state)
@@ -87,9 +107,10 @@ const FRAME_RATE: Record<ShowOn, { busy: number; idle: number }> = {
 }
 
 function render(songMs: number, wallMs: number): boolean {
-  const busy = style?.frame({ songMs, wallMs, width: window.innerWidth, height: window.innerHeight }) ?? false
+  const presentationBusy = presenter.update(songMs)
+  const styleBusy = style?.frame({ songMs, wallMs, width: window.innerWidth, height: window.innerHeight }) ?? false
   if (mode === 'lock') lockClock.update(Date.now())
-  return busy
+  return presentationBusy || styleBusy
 }
 
 function loop(): void {
@@ -106,9 +127,14 @@ function loop(): void {
     return
   }
   // Wait out most of the frame budget, then align the next frame to vsync — but never
-  // sleep through the start of the next word, or it would light up a frame late.
+  // sleep through the start of the next word or upcoming instrumental transition.
   let wait = 1000 / fps - (performance.now() - started) - 8
-  if (model && clock.playing) wait = Math.min(wait, msUntilNextWord(model, songMs) - 12)
+  if (clock.playing) {
+    const nextWord = model ? msUntilNextWord(model, songMs) : Number.POSITIVE_INFINITY
+    const nextTransition = presenter.msUntilNextTransition(songMs)
+    const nextEvent = Math.min(nextWord, nextTransition)
+    if (Number.isFinite(nextEvent)) wait = Math.min(wait, nextEvent - 12)
+  }
   setTimeout(() => requestAnimationFrame(loop), Math.max(0, wait))
 }
 

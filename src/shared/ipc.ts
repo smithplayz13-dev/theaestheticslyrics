@@ -1,4 +1,4 @@
-import type { ColorRole, Palette, PlaybackAnchor, ShowOn, StyleId, TimedLyrics, TrackInfo } from './types'
+import type { BackgroundPalette, ColorRole, Palette, PlaybackAnchor, ShowOn, StyleId, TimedLyrics, TrackInfo } from './types'
 
 export const IPC = {
   stageState: 'stage:state',
@@ -26,6 +26,8 @@ export interface StageState {
   track: TrackInfo | null
   lyrics: TimedLyrics | null
   config: StageConfig
+  artworkUrl?: string | null
+  backgroundPalette?: BackgroundPalette | null
 }
 
 /** Snapshot mode: render exactly this moment, then acknowledge with the same id. */

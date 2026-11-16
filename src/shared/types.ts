@@ -15,6 +15,23 @@ export interface Palette {
   secondary: string
 }
 
+/** Background gradient palette derived from album artwork. */
+export interface BackgroundPalette {
+  primary: string
+  secondary: string
+  tertiary: string
+  glow: string
+  base: string
+}
+
+export const DEFAULT_BACKGROUND_PALETTE: BackgroundPalette = {
+  primary: '#14111d',
+  secondary: '#0f141f',
+  tertiary: '#181412',
+  glow: '#3b304c',
+  base: '#050508'
+}
+
 /** Times are integer milliseconds of song time. */
 export interface TimedWord {
   text: string

@@ -9,7 +9,19 @@
     <title>theaestheticslyrics</title>
   </head>
   <body>
+    <div id="stage-bg" class="stage-bg" aria-hidden="true">
+      <div id="stage-bg-a" class="stage-bg-layer active"></div>
+      <div id="stage-bg-b" class="stage-bg-layer"></div>
+    </div>
     <div id="stage"></div>
+    <div id="instrumental-view" class="instrumental-view" aria-hidden="true">
+      <div class="instrumental-glow" id="instrumental-glow">
+        <img class="instrumental-glow-img" id="instrumental-glow-img" alt="" />
+      </div>
+      <div class="instrumental-card">
+        <img class="instrumental-img" id="instrumental-img" alt="" />
+      </div>
+    </div>
     <script type="module" src="./src/stage/main.ts"></script>
   </body>
 </html>
