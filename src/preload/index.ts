@@ -21,7 +21,8 @@ const api: LyricsAppApi = {
         kind: request.kind === 'escape' ? 'escape' : 'input',
         detail: String(request.detail).slice(0, 200)
       }),
-    controlMedia: (action) => ipcRenderer.send(IPC.stageControlMedia, action)
+    controlMedia: (action, arg) => ipcRenderer.send(IPC.stageControlMedia, action, arg),
+    toggleAmbient: (on) => ipcRenderer.send(IPC.stageToggleAmbient, on)
   },
   colors: {
     get: () => ipcRenderer.invoke(IPC.colorsGet),

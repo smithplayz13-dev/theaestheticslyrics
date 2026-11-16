@@ -297,7 +297,7 @@ $lastJson = ''
 $lastEmit = [DateTime]::MinValue
 $lastError = [DateTime]::MinValue
 
-function Invoke-MediaControl($action, $targetApp) {
+function Invoke-MediaControl($action, $targetApp, $arg = $null) {
   $target = $null
   if ($targetApp) {
     foreach ($s in $manager.GetSessions()) {
@@ -321,6 +321,12 @@ function Invoke-MediaControl($action, $targetApp) {
         'pause'      { $handled = Await ($target.TryPauseAsync()) ([bool]) 1500 }
         'next'       { $handled = Await ($target.TrySkipNextAsync()) ([bool]) 1500 }
         'previous'   { $handled = Await ($target.TrySkipPreviousAsync()) ([bool]) 1500 }
+        'seek'       {
+          if ($null -ne $arg) {
+            $ticks = [long]([double]$arg * 10000000.0)
+            $handled = Await ($target.TryChangePlaybackPositionAsync($ticks)) ([bool]) 1500
+          }
+        }
       }
     } catch {
       $handled = $false
@@ -347,7 +353,7 @@ while ($true) {
       try {
         $cmdObj = ConvertFrom-Json -InputObject $rawCmd
         if ($cmdObj.action) {
-          Invoke-MediaControl $cmdObj.action $cmdObj.app
+          Invoke-MediaControl $cmdObj.action $cmdObj.app $cmdObj.arg
         }
       } catch {
         Emit @{ type = 'error'; message = "control: failed to handle command ($($_.Exception.Message))" }

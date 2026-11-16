@@ -110,7 +110,8 @@ export class AppController {
       log: this.log,
       settings: () => this.settings.get(),
       lockWorkstation: () => lockWorkstation(this.log),
-      controlMedia: (action) => this.watcher.controlMedia(action)
+      controlMedia: (action, arg) => this.watcher.controlMedia(action, arg),
+      setAmbientMode: (on) => this.settings.update({ ambientMode: on })
     })
     this.colors = new ColorsWindow({
       log: this.log,
@@ -370,6 +371,7 @@ export class AppController {
       resetColors: () => this.settings.update({ colors: { ...DEFAULT_COLORS } }),
       showNow: () => void this.stage.openLock('hotkey'),
       setLockOnReturn: (lockOnReturn) => this.settings.update({ lockOnReturn }),
+      setAmbientMode: (ambientMode) => this.settings.update({ ambientMode }),
       setOffset: (offsetMs) => this.settings.update({ offsetMs }),
       setWordLevel: (wordLevel) => this.settings.update({ wordLevel }),
       setIdle: (idleMinutes) => this.settings.update({ idleMinutes }),

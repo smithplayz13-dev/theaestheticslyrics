@@ -36,6 +36,12 @@ describe('sanitizeSettings', () => {
     expect(sanitizeSettings({ lockOnReturn: 'yes' }).lockOnReturn).toBe(false)
   })
 
+  it('keeps valid ambientMode and falls back to default on invalid', () => {
+    expect(DEFAULT_SETTINGS.ambientMode).toBe(false)
+    expect(sanitizeSettings({ ambientMode: true }).ambientMode).toBe(true)
+    expect(sanitizeSettings({ ambientMode: 'yes' }).ambientMode).toBe(false)
+  })
+
   it('repairs each invalid field on its own', () => {
     const s = sanitizeSettings({
       style: 'x',

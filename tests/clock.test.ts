@@ -54,4 +54,14 @@ describe('SongClock', () => {
     clock.setAnchor(anchor({ trackKey: 'other', positionMs: 11_050, atEpochMs: 2000 }), 1000, 2000)
     expect(clock.now(1000, 2000)).toBe(11_050)
   })
+
+  it('updates position immediately when seek() is called', () => {
+    const clock = new SongClock()
+    clock.setAnchor(anchor(), 0, 1000)
+    expect(clock.now(1000, 2000)).toBe(11_000)
+    clock.seek(45_000, 1500, 2500)
+    expect(clock.now(1500, 2500)).toBe(45_000)
+    // Continues playing from seek position
+    expect(clock.now(2500, 3500)).toBe(46_000)
+  })
 })

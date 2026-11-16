@@ -8,6 +8,7 @@ export const IPC = {
   stageSnapshot: 'stage:snapshot',
   stageSnapshotDone: 'stage:snapshot-done',
   stageControlMedia: 'stage:control-media',
+  stageToggleAmbient: 'stage:toggle-ambient',
   colorsGet: 'colors:get',
   colorsSet: 'colors:set',
   colorsAutoSync: 'colors:auto-sync',
@@ -20,6 +21,7 @@ export interface StageConfig {
   mode: ShowOn
   palette: Palette
   offsetMs: number
+  ambientMode?: boolean
 }
 
 /** Everything the stage needs besides the moving playback clock. */
@@ -67,7 +69,9 @@ export interface StageApi {
   /** Input on the lyrics screen; the main process decides whether it closes the screen. */
   dismiss(request: DismissRequest): void
   /** Controls playback for the currently followed media player session. */
-  controlMedia(action: 'play-pause' | 'play' | 'pause' | 'next' | 'previous'): void
+  controlMedia(action: 'play-pause' | 'play' | 'pause' | 'next' | 'previous' | 'seek', arg?: number): void
+  /** Toggles or sets Ambient Mode (immersive fullscreen lyrics player). */
+  toggleAmbient(on?: boolean): void
 }
 
 export interface ColorsApi {

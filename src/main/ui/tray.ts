@@ -24,6 +24,7 @@ export interface TrayActions {
   resetColors(): void
   showNow(): void
   setLockOnReturn(on: boolean): void
+  setAmbientMode(on: boolean): void
   setOffset(ms: number): void
   setWordLevel(on: boolean): void
   setIdle(minutes: IdleMinutes): void
@@ -165,6 +166,12 @@ export class TrayMenu {
         accelerator: m.hotkeyOk ? 'CommandOrControl+Alt+L' : undefined,
         registerAccelerator: false,
         click: () => a.showNow()
+      },
+      {
+        label: 'Ambient Mode (Fullscreen Player)',
+        type: 'checkbox',
+        checked: s.ambientMode,
+        click: (item) => a.setAmbientMode(item.checked)
       },
       {
         label: 'Lock Windows When I Come Back',

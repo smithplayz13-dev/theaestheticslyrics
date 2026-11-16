@@ -47,6 +47,8 @@ export interface Settings {
   wordLevel: boolean
   /** Automatic uses the whole chain; an explicit choice uses only that source. */
   lyricsProvider: LyricsProvider
+  /** Ambient mode: immersive fullscreen lyrics player with dynamic artwork and media controls. */
+  ambientMode: boolean
 }
 
 export const IDLE_CHOICES: readonly IdleMinutes[] = [0, 1, 2, 5]
@@ -77,7 +79,8 @@ export const DEFAULT_SETTINGS: Readonly<Settings> = Object.freeze({
   welcomed: false,
   lockOnReturn: false,
   wordLevel: true,
-  lyricsProvider: 'auto'
+  lyricsProvider: 'auto',
+  ambientMode: false
 }) as Readonly<Settings>
 
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)
@@ -123,7 +126,8 @@ export function sanitizeSettings(raw: unknown): Settings {
     wordLevel: typeof r.wordLevel === 'boolean' ? r.wordLevel : DEFAULT_SETTINGS.wordLevel,
     lyricsProvider: LYRICS_PROVIDERS.includes(r.lyricsProvider as LyricsProvider)
       ? (r.lyricsProvider as LyricsProvider)
-      : DEFAULT_SETTINGS.lyricsProvider
+      : DEFAULT_SETTINGS.lyricsProvider,
+    ambientMode: typeof r.ambientMode === 'boolean' ? r.ambientMode : DEFAULT_SETTINGS.ambientMode
   }
 }
 

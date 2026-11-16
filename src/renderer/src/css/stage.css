@@ -598,3 +598,524 @@ body[data-mode='always'] .visual-text {
   font-weight: 500;
   opacity: 0.85;
 }
+
+/* ---------- Ambient Mode (Fullscreen Player) & Toggle Buttons ---------- */
+
+.ambient-mode-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 9999px;
+  color: rgba(255, 255, 255, 0.75);
+  cursor: pointer;
+  padding: 8px 14px;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  transition: all 0.25s cubic-bezier(0.2, 0, 0, 1);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+}
+
+.ambient-mode-toggle:hover {
+  background: rgba(255, 255, 255, 0.18);
+  border-color: rgba(255, 255, 255, 0.3);
+  color: #ffffff;
+  transform: translateY(-1px);
+}
+
+.ambient-mode-toggle:active {
+  transform: translateY(1px);
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.btn-ambient-enter {
+  position: fixed;
+  top: 24px;
+  right: 28px;
+  z-index: 25;
+  padding: 10px;
+  opacity: 0.25;
+}
+
+body:hover .btn-ambient-enter,
+.btn-ambient-enter:focus,
+.btn-ambient-enter:hover {
+  opacity: 1;
+}
+
+body[data-presentation-mode='ambient'] .btn-ambient-enter {
+  display: none !important;
+}
+
+body[data-mode='always'] .btn-ambient-enter {
+  display: none !important;
+}
+
+body[data-presentation-mode='ambient'] {
+  cursor: default !important;
+}
+
+body[data-presentation-mode='ambient'] .stage-hint,
+body[data-presentation-mode='ambient'] .lock-clock,
+body[data-presentation-mode='ambient'] .instrumental-view {
+  display: none !important;
+}
+
+body[data-presentation-mode='ambient']::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background: radial-gradient(ellipse at 28% 50%, rgba(0, 0, 0, 0.45) 0%, rgba(0, 0, 0, 0.15) 60%, transparent 100%);
+}
+
+body[data-presentation-mode='ambient'] #stage {
+  position: fixed;
+  left: clamp(24px, 5vw, 80px);
+  top: 40px;
+  width: clamp(320px, 48vw, 780px);
+  height: calc(100vh - 170px);
+  z-index: 2;
+  pointer-events: none;
+  transition: opacity 0.4s ease-out;
+}
+
+body[data-presentation-mode='ambient'] #stage.ambient-break {
+  opacity: 0.15;
+}
+
+.ambient-view {
+  position: fixed;
+  inset: 0;
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.4s cubic-bezier(0.2, 0, 0, 1), visibility 0.4s;
+}
+
+body[data-presentation-mode='ambient'] .ambient-view {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+}
+
+.ambient-header {
+  position: absolute;
+  top: 24px;
+  right: 28px;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.btn-ambient-exit {
+  padding: 8px 14px;
+}
+
+.ambient-exit-badge {
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 1px 6px;
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
+  color: rgba(255, 255, 255, 0.9);
+  letter-spacing: 0.04em;
+}
+
+.ambient-content {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  flex: 1;
+  width: 100%;
+  height: calc(100vh - 130px);
+  box-sizing: border-box;
+  padding: 40px clamp(24px, 5vw, 80px) 0;
+  position: relative;
+  z-index: 3;
+}
+
+.ambient-left {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.ambient-break-indicator {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  opacity: 0;
+  transform: translateY(8px);
+  transition: opacity 0.4s ease-out, transform 0.4s ease-out;
+  pointer-events: none;
+}
+
+.ambient-break-indicator.active {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.ambient-note-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--highlight, #1db954);
+  animation: ambient-pulse 2.2s infinite ease-in-out;
+}
+
+.ambient-note-icon svg {
+  width: 24px;
+  height: 24px;
+}
+
+@keyframes ambient-pulse {
+  0%, 100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.1);
+  }
+  50% {
+    transform: scale(1.08);
+    box-shadow: 0 0 20px 4px var(--album-bg-glow, rgba(255, 255, 255, 0.15));
+  }
+}
+
+.ambient-break-text {
+  font-family: 'Inter Variable', 'Segoe UI Variable Display', 'Segoe UI', sans-serif;
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.7);
+  letter-spacing: 0.02em;
+}
+
+.ambient-right {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: clamp(300px, 38vw, 540px);
+  z-index: 5;
+  box-sizing: border-box;
+}
+
+.ambient-card {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: clamp(260px, 32vw, 460px);
+  height: clamp(260px, 32vw, 460px);
+  max-height: 46vh;
+  aspect-ratio: 1 / 1;
+  border-radius: 20px;
+  z-index: 2;
+}
+
+.ambient-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  border-radius: 20px;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.75), 0 4px 16px rgba(0, 0, 0, 0.4);
+  image-rendering: -webkit-optimize-contrast;
+  image-rendering: high-quality;
+  position: relative;
+  z-index: 2;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+.ambient-glow {
+  position: absolute;
+  inset: -14%;
+  width: 128%;
+  height: 128%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1;
+  pointer-events: none;
+  background: radial-gradient(circle, var(--album-bg-glow, rgba(90, 60, 130, 0.65)) 0%, var(--album-bg-primary, rgba(30, 20, 50, 0.45)) 55%, transparent 75%);
+  filter: blur(54px);
+  opacity: 0.88;
+  transform: translateZ(0);
+}
+
+.ambient-glow-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 28px;
+  filter: blur(48px) saturate(1.4);
+  opacity: 0.75;
+  transform: scale(1.06);
+}
+
+.ambient-meta {
+  width: clamp(260px, 32vw, 460px);
+  margin-top: clamp(14px, 2.2vh, 24px);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  text-align: left;
+  box-sizing: border-box;
+}
+
+.ambient-title {
+  font-family: 'Inter Variable', 'Segoe UI Variable Display', 'Segoe UI', sans-serif;
+  font-size: clamp(1.4rem, 2.2vw, 2.4rem);
+  font-weight: 800;
+  color: #ffffff;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+  margin: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.6);
+}
+
+.ambient-artist {
+  font-family: 'Inter Variable', 'Segoe UI Variable Display', 'Segoe UI', sans-serif;
+  font-size: clamp(0.95rem, 1.3vw, 1.35rem);
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.68);
+  letter-spacing: -0.01em;
+  line-height: 1.3;
+  margin-top: 6px;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.5);
+}
+
+/* Bottom Controls */
+.ambient-bottom {
+  height: 130px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+  padding: 0 clamp(24px, 5vw, 80px) 16px;
+  box-sizing: border-box;
+}
+
+.ambient-progress {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  max-width: min(85vw, 680px);
+}
+
+.ambient-time {
+  font-family: 'Inter Variable', 'Segoe UI Variable Display', 'Segoe UI', sans-serif;
+  font-size: 0.82rem;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.6);
+  font-variant-numeric: tabular-nums;
+  min-width: 36px;
+  text-align: center;
+}
+
+.ambient-track-bar {
+  flex: 1;
+  height: 5px;
+  background: rgba(255, 255, 255, 0.22);
+  border-radius: 9999px;
+  position: relative;
+  cursor: pointer;
+  transition: height 0.15s ease;
+  outline: none;
+}
+
+.ambient-track-bar:hover,
+.ambient-track-bar:focus {
+  height: 7px;
+}
+
+.ambient-track-fill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 0%;
+  background: var(--highlight, #1db954);
+  border-radius: 9999px;
+  pointer-events: none;
+}
+
+.ambient-track-thumb {
+  position: absolute;
+  top: 50%;
+  left: 0%;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: #ffffff;
+  transform: translate(-50%, -50%) scale(0);
+  transition: transform 0.15s ease;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.45);
+  pointer-events: none;
+}
+
+.ambient-track-bar:hover .ambient-track-thumb,
+.ambient-track-bar:focus .ambient-track-thumb,
+.ambient-track-bar.dragging .ambient-track-thumb {
+  transform: translate(-50%, -50%) scale(1);
+}
+
+.ambient-controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 22px;
+  margin-top: 10px;
+}
+
+.ambient-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: rgba(255, 255, 255, 0.8);
+  transition: all 0.2s cubic-bezier(0.2, 0, 0, 1);
+  outline: none;
+}
+
+.ambient-btn.btn-prev,
+.ambient-btn.btn-next {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+}
+
+.ambient-btn.btn-prev:hover,
+.ambient-btn.btn-next:hover {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.1);
+  transform: scale(1.08);
+}
+
+.ambient-btn.btn-prev:active,
+.ambient-btn.btn-next:active {
+  transform: scale(0.95);
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.ambient-btn.btn-play-pause {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: #ffffff;
+  color: #000000;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
+}
+
+.ambient-btn.btn-play-pause:hover {
+  transform: scale(1.08);
+  background: #f4f4f4;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5);
+}
+
+.ambient-btn.btn-play-pause:active {
+  transform: scale(0.96);
+  background: #e0e0e0;
+}
+
+.ambient-btn .control-icon {
+  width: 22px;
+  height: 22px;
+}
+
+.ambient-btn.btn-play-pause .control-icon {
+  width: 24px;
+  height: 24px;
+}
+
+.ambient-btn.btn-play-pause .icon-pause {
+  display: none;
+}
+
+.ambient-btn.btn-play-pause[data-playing='true'] .icon-play {
+  display: none;
+}
+
+.ambient-btn.btn-play-pause[data-playing='true'] .icon-pause {
+  display: block;
+}
+
+/* Responsive Breakpoints */
+@media (max-width: 860px) {
+  body[data-presentation-mode='ambient'] #stage {
+    position: fixed;
+    left: 20px;
+    right: 20px;
+    top: 50%;
+    width: auto;
+    height: calc(50vh - 120px);
+  }
+
+  .ambient-content {
+    flex-direction: column;
+    justify-content: flex-start;
+    padding-top: 20px;
+  }
+
+  .ambient-left {
+    height: 45vh;
+    width: 100%;
+  }
+
+  .ambient-right {
+    height: 40vh;
+    width: 100%;
+  }
+
+  .ambient-card {
+    width: clamp(160px, 28vh, 240px);
+    height: clamp(160px, 28vh, 240px);
+  }
+
+  .ambient-meta {
+    width: 100%;
+    text-align: center;
+    align-items: center;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stage-bg-layer,
+  .ambient-view,
+  .ambient-mode-toggle,
+  .ambient-btn,
+  .ambient-break-indicator {
+    transition: none !important;
+    animation: none !important;
+  }
+}

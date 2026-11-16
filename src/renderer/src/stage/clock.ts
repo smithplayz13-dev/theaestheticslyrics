@@ -44,6 +44,18 @@ export class SongClock {
     this.correctionAt = perfNow
   }
 
+  /** Seeks the clock directly to the target song time in ms. */
+  seek(targetMs: number, perfNow: number, epochNow: number): void {
+    if (!this.anchor) return
+    this.anchor = {
+      ...this.anchor,
+      positionMs: Math.max(0, targetMs + this.offsetMs),
+      atEpochMs: epochNow
+    }
+    this.correction = 0
+    this.correctionAt = perfNow
+  }
+
   /** Current song time in ms (0 before any anchor). */
   now(perfNow: number, epochNow: number): number {
     if (!this.anchor) return 0

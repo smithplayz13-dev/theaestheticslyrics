@@ -81,15 +81,16 @@ export class MediaWatcher extends EventEmitter<WatcherEvents> {
     return art ? { key, ...art } : null
   }
 
-  controlMedia(action: 'play-pause' | 'play' | 'pause' | 'next' | 'previous'): void {
+  controlMedia(action: 'play-pause' | 'play' | 'pause' | 'next' | 'previous' | 'seek', arg?: number): void {
     if (this.child && !this.child.killed && this.child.stdin?.writable) {
       const payload = JSON.stringify({
         type: 'command',
         action,
-        app: this.track?.app ?? null
+        app: this.track?.app ?? null,
+        arg
       })
       this.child.stdin.write(`${payload}\n`)
-      this.opts.log(`media: sent control action "${action}" to bridge`)
+      this.opts.log(`media: sent control action "${action}" to bridge${arg !== undefined ? ` (${arg})` : ''}`)
     } else {
       this.opts.log(`media: bridge stdin unavailable for control action "${action}"`)
     }

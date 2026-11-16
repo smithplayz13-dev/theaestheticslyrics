@@ -7,6 +7,7 @@ import { LockClock } from './lock-clock'
 import { buildModel, msUntilNextWord, type LyricsModel } from './model'
 import { BackgroundManager } from './background'
 import { InstrumentalPresenter } from './instrumental'
+import { AmbientPresenter } from './ambient'
 import { createStyle } from './styles/registry'
 import type { StageStyle } from './styles/types'
 
@@ -50,6 +51,98 @@ document.getElementById('instrumental-btn-next')?.addEventListener('click', (e) 
   api.controlMedia('next')
 })
 
+const ambient = new AmbientPresenter({
+  container: document.getElementById('ambient-view'),
+  breakIndicator: document.getElementById('ambient-break-indicator'),
+  stage: root,
+  img: document.getElementById('ambient-img') as HTMLImageElement | null,
+  glowImg: document.getElementById('ambient-glow-img') as HTMLImageElement | null,
+  titleEl: document.getElementById('ambient-title'),
+  artistEl: document.getElementById('ambient-artist'),
+  curTimeEl: document.getElementById('ambient-time-cur'),
+  totalTimeEl: document.getElementById('ambient-time-total'),
+  fillEl: document.getElementById('ambient-track-fill'),
+  thumbEl: document.getElementById('ambient-track-thumb'),
+  playPauseBtn: document.getElementById('ambient-btn-play-pause'),
+  setPresentationMode: (m) => {
+    document.body.dataset.presentationMode = m
+  }
+})
+
+document.getElementById('ambient-enter-btn')?.addEventListener('click', (e) => {
+  e.stopPropagation()
+  api.toggleAmbient(true)
+})
+
+document.getElementById('ambient-exit-btn')?.addEventListener('click', (e) => {
+  e.stopPropagation()
+  api.toggleAmbient(false)
+})
+
+document.getElementById('ambient-btn-play-pause')?.addEventListener('click', (e) => {
+  e.stopPropagation()
+  api.controlMedia('play-pause')
+})
+document.getElementById('ambient-btn-prev')?.addEventListener('click', (e) => {
+  e.stopPropagation()
+  api.controlMedia('previous')
+})
+document.getElementById('ambient-btn-next')?.addEventListener('click', (e) => {
+  e.stopPropagation()
+  api.controlMedia('next')
+})
+
+const trackBar = document.getElementById('ambient-track-bar')
+if (trackBar) {
+  let isDragging = false
+  const getPct = (clientX: number): number => {
+    const rect = trackBar.getBoundingClientRect()
+    if (rect.width <= 0) return 0
+    return Math.max(0, Math.min(1, (clientX - rect.left) / rect.width))
+  }
+
+  const onPointerMove = (e: MouseEvent | TouchEvent): void => {
+    if (!isDragging) return
+    const clientX = 'touches' in e && e.touches[0] ? e.touches[0].clientX : (e as MouseEvent).clientX
+    ambient.seekToPercent(getPct(clientX))
+  }
+
+  const onPointerUp = (e: MouseEvent | TouchEvent): void => {
+    if (!isDragging) return
+    isDragging = false
+    ambient.setSeeking(false)
+    trackBar.classList.remove('dragging')
+    window.removeEventListener('mousemove', onPointerMove)
+    window.removeEventListener('mouseup', onPointerUp)
+    window.removeEventListener('touchmove', onPointerMove)
+    window.removeEventListener('touchend', onPointerUp)
+
+    const clientX = 'changedTouches' in e && e.changedTouches[0] ? e.changedTouches[0].clientX : (e as MouseEvent).clientX
+    const targetMs = ambient.seekToPercent(getPct(clientX))
+    clock.seek(targetMs, performance.now(), Date.now())
+    api.controlMedia('seek', targetMs / 1000)
+    render(targetMs, performance.now())
+  }
+
+  const onPointerDown = (e: MouseEvent | TouchEvent): void => {
+    e.preventDefault()
+    e.stopPropagation()
+    isDragging = true
+    ambient.setSeeking(true)
+    trackBar.classList.add('dragging')
+    const clientX = 'touches' in e && e.touches[0] ? e.touches[0].clientX : (e as MouseEvent).clientX
+    ambient.seekToPercent(getPct(clientX))
+
+    window.addEventListener('mousemove', onPointerMove)
+    window.addEventListener('mouseup', onPointerUp)
+    window.addEventListener('touchmove', onPointerMove, { passive: true })
+    window.addEventListener('touchend', onPointerUp)
+  }
+
+  trackBar.addEventListener('mousedown', onPointerDown)
+  trackBar.addEventListener('touchstart', onPointerDown, { passive: false })
+}
+
 let style: StageStyle | null = null
 let styleId: StyleId | null = null
 let model: LyricsModel | null = null
@@ -87,7 +180,9 @@ function applyPaletteVars(p: Palette): void {
 function applyState(state: StageState): void {
   mode = state.config.mode
   document.body.dataset.mode = mode
-  lockClock.setVisible(mode === 'lock')
+  const ambientActive = Boolean(state.config.ambientMode)
+  ambient.setAmbientMode(ambientActive)
+  lockClock.setVisible(mode === 'lock' && !ambientActive)
   palette = state.config.palette
   applyPaletteVars(palette)
   bgManager.setPalette(state.backgroundPalette)
@@ -95,6 +190,9 @@ function applyState(state: StageState): void {
   presenter.setArtwork(state.artworkUrl ?? null)
   presenter.setLyrics(state.lyrics, state.track?.durationMs ?? 0)
   presenter.setPlaying(clock.playing)
+  ambient.setTrack(state.track)
+  ambient.setArtwork(state.artworkUrl ?? null)
+  ambient.setPlaying(clock.playing)
   clock.setOffset(state.config.offsetMs)
 
   const sig = signature(state)
@@ -129,10 +227,16 @@ const FRAME_RATE: Record<ShowOn, { busy: number; idle: number }> = {
 }
 
 function render(songMs: number, wallMs: number): boolean {
-  const presentationBusy = presenter.update(songMs)
-  const styleBusy = style?.frame({ songMs, wallMs, width: window.innerWidth, height: window.innerHeight }) ?? false
-  if (mode === 'lock') lockClock.update(Date.now())
-  return presentationBusy || styleBusy
+  const isAmbient = ambient.isAmbient
+  const presentationBusy = isAmbient ? false : presenter.update(songMs)
+  const isBreak = presenter.isOverlayActive
+  ambient.update(songMs, isBreak)
+
+  const W = root.clientWidth || window.innerWidth
+  const H = root.clientHeight || window.innerHeight
+  const styleBusy = style?.frame({ songMs, wallMs, width: W, height: H }) ?? false
+  if (mode === 'lock' && !isAmbient) lockClock.update(Date.now())
+  return presentationBusy || styleBusy || isBreak || ambient.seeking
 }
 
 function loop(): void {
@@ -181,6 +285,7 @@ api.onState((state) => {
 api.onAnchor((anchor) => {
   clock.setAnchor(anchor, performance.now(), Date.now())
   presenter.setPlaying(anchor.playing)
+  ambient.setPlaying(anchor.playing)
   startLoop()
 })
 
@@ -204,8 +309,8 @@ let travelled = 0
 let lastMove: { x: number; y: number; at: number } | null = null
 window.addEventListener('mousemove', (e) => {
   if (mode !== 'lock') return
-  if (presenter.isOverlayActive) {
-    // When the instrumental now-playing overlay is active, mouse interaction is expected!
+  if (ambient.isAmbient || presenter.isOverlayActive) {
+    // When Ambient Mode or the instrumental now-playing overlay is active, mouse interaction is expected!
     // Do not dismiss the screen on mouse movements.
     travelled = 0
     lastMove = { x: e.screenX, y: e.screenY, at: e.timeStamp }
@@ -223,7 +328,44 @@ window.addEventListener('mousemove', (e) => {
     travelled = 0
   }
 })
+
 window.addEventListener('keydown', (e) => {
+  if (ambient.isAmbient) {
+    if (e.key === 'Escape') {
+      e.preventDefault()
+      api.toggleAmbient(false)
+      return
+    }
+    if (e.key === 'a' || e.key === 'A') {
+      e.preventDefault()
+      api.toggleAmbient(false)
+      return
+    }
+    if (e.code === 'Space') {
+      e.preventDefault()
+      api.controlMedia('play-pause')
+      return
+    }
+    if (e.code === 'MediaTrackNext' || (e.ctrlKey && e.code === 'ArrowRight') || e.code === 'ArrowRight') {
+      e.preventDefault()
+      api.controlMedia('next')
+      return
+    }
+    if (e.code === 'MediaTrackPrevious' || (e.ctrlKey && e.code === 'ArrowLeft') || e.code === 'ArrowLeft') {
+      e.preventDefault()
+      api.controlMedia('previous')
+      return
+    }
+    return
+  }
+
+  // Not in ambient mode: pressing 'a' or 'A' activates Ambient Mode
+  if (e.key === 'a' || e.key === 'A') {
+    e.preventDefault()
+    api.toggleAmbient(true)
+    return
+  }
+
   if (mode !== 'lock') return
   if (e.key === 'Escape') {
     api.dismiss({ kind: 'escape', detail: 'Esc' })
@@ -248,13 +390,22 @@ window.addEventListener('keydown', (e) => {
   }
   api.dismiss({ kind: 'input', detail: `keydown key=${e.key} repeat=${e.repeat} trusted=${e.isTrusted}` })
 })
+
 for (const type of ['mousedown', 'wheel', 'touchstart'] as const) {
   window.addEventListener(
     type,
     (e) => {
+      if (ambient.isAmbient) {
+        // Ambient mode is an interactive player view: do not dismiss on mouse or touch input!
+        return
+      }
       if (mode !== 'lock') return
+      const target = e.target as HTMLElement | null
+      if (target && target.closest('#ambient-enter-btn')) {
+        // Clicked the enter ambient button: do not dismiss!
+        return
+      }
       if (presenter.isOverlayActive) {
-        const target = e.target as HTMLElement | null
         if (target && target.closest('#instrumental-container')) {
           // User clicked inside the now-playing overlay / controls: do not dismiss!
           return

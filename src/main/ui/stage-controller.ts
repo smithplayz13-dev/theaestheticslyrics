@@ -31,7 +31,8 @@ export interface StageControllerDeps {
   settings: () => Settings
   lockWorkstation: () => void
   onLockChange?: (open: boolean) => void
-  controlMedia?: (action: 'play-pause' | 'play' | 'pause' | 'next' | 'previous') => void
+  controlMedia?: (action: 'play-pause' | 'play' | 'pause' | 'next' | 'previous' | 'seek', arg?: number) => void
+  setAmbientMode?: (on: boolean) => void
 }
 
 /** An idle-opened lyrics screen closes this long after the music stops. */
@@ -62,6 +63,7 @@ export class StageController {
   constructor(private readonly deps: StageControllerDeps) {
     ipcMain.on(IPC.stageDismiss, this.onDismiss)
     ipcMain.on(IPC.stageControlMedia, this.onControlMedia)
+    ipcMain.on(IPC.stageToggleAmbient, this.onToggleAmbient)
     powerMonitor.on('lock-screen', this.onOsLock)
     powerMonitor.on('unlock-screen', this.onOsUnlock)
     screen.on('display-added', this.onDisplaysChanged)
@@ -92,7 +94,10 @@ export class StageController {
 
   /** Display or mode changed in settings. */
   settingsChanged(): void {
-    for (const sw of this.windows()) this.place(sw.win)
+    for (const sw of this.windows()) {
+      this.place(sw.win)
+      this.sendState(sw)
+    }
     if (this.deps.settings().showOn === 'lock') this.destroy(this.overlayWin)
     this.evaluateOverlay()
   }
@@ -223,6 +228,7 @@ export class StageController {
     clearInterval(this.timer)
     ipcMain.removeListener(IPC.stageDismiss, this.onDismiss)
     ipcMain.removeListener(IPC.stageControlMedia, this.onControlMedia)
+    ipcMain.removeListener(IPC.stageToggleAmbient, this.onToggleAmbient)
     powerMonitor.removeListener('lock-screen', this.onOsLock)
     powerMonitor.removeListener('unlock-screen', this.onOsUnlock)
     screen.removeListener('display-added', this.onDisplaysChanged)
@@ -387,7 +393,13 @@ export class StageController {
     const state: StageState = {
       track: c.track,
       lyrics: c.lyrics,
-      config: { style: c.style, palette: c.palette, offsetMs: c.offsetMs, mode: sw.kind === 'lock' ? 'lock' : 'always' },
+      config: {
+        style: c.style,
+        palette: c.palette,
+        offsetMs: c.offsetMs,
+        mode: sw.kind === 'lock' ? 'lock' : 'always',
+        ambientMode: this.deps.settings().ambientMode
+      },
       artworkUrl: c.artworkUrl ?? null,
       backgroundPalette: c.backgroundPalette ?? null
     }
@@ -432,16 +444,23 @@ export class StageController {
     }
   }
 
-  private readonly onControlMedia = (_event: IpcMainEvent, action: unknown): void => {
+  private readonly onControlMedia = (_event: IpcMainEvent, action: unknown, arg?: unknown): void => {
     if (
       action === 'play-pause' ||
       action === 'play' ||
       action === 'pause' ||
       action === 'next' ||
-      action === 'previous'
+      action === 'previous' ||
+      action === 'seek'
     ) {
-      this.deps.controlMedia?.(action)
+      this.deps.controlMedia?.(action, typeof arg === 'number' ? arg : undefined)
     }
+  }
+
+  private readonly onToggleAmbient = (_event: IpcMainEvent, on?: unknown): void => {
+    const current = this.deps.settings().ambientMode
+    const next = typeof on === 'boolean' ? on : !current
+    this.deps.setAmbientMode?.(next)
   }
 
   private sendSessionInfo(session: LockSession): void {
