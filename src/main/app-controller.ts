@@ -18,6 +18,7 @@ import { BackgroundPaletteCache, extractBackgroundPalette } from './palette/back
 import { extractPalette, paletteFromColors } from './palette/extract'
 import type { AppPaths } from './paths'
 import { PowerKeeper } from './power'
+import { ArtworkService } from './artwork/service'
 import { SettingsStore, type LyricsProvider, type Settings } from './settings'
 import { ColorsWindow } from './ui/colors-window'
 import { StageController } from './ui/stage-controller'
@@ -67,6 +68,8 @@ export class AppController {
   private health: { ok: boolean; message?: string } = { ok: true }
   private hotkeyOk = false
   private lookupToken = 0
+  private artworkLookupToken = 0
+  private artworkService!: ArtworkService
   private loginItemApplied: boolean | null = null
   private lastWordLevel = true
   private lastLyricsProvider: LyricsProvider = 'auto'
@@ -106,6 +109,7 @@ export class AppController {
     this.lastWordLevel = this.settings.get().wordLevel
     this.lastLyricsProvider = this.settings.get().lyricsProvider
     this.power = new PowerKeeper(this.log)
+    this.artworkService = new ArtworkService({ log: this.log })
     this.stage = new StageController({
       log: this.log,
       settings: () => this.settings.get(),
@@ -197,6 +201,7 @@ export class AppController {
     this.providerArtworkUrl = null
     this.anchor = null
     const token = ++this.lookupToken
+    const artToken = ++this.artworkLookupToken
     this.status = track?.title ? 'searching' : 'idle'
     this.log(
       track
@@ -207,6 +212,7 @@ export class AppController {
       this.later(TRACK_SETTLE_MS, () => void this.lookup(track, token))
       const art = this.watcher.artworkFor(track.key)
       if (art) this.onArtwork(art)
+      void this.lookupArtwork(track, artToken)
     }
     this.refresh()
   }
@@ -237,6 +243,49 @@ export class AppController {
     this.refresh()
   }
 
+  private async lookupArtwork(track: TrackInfo, token: number): Promise<void> {
+    if (token !== this.artworkLookupToken) return
+    const localThumbnail = this.artUrlCache.get(track.key) || null
+    try {
+      const res = await this.artworkService.getArtwork({
+        track: track.title,
+        artist: track.artist,
+        album: track.album,
+        durationMs: track.durationMs,
+        providerArtworkUrl: localThumbnail
+      })
+      if (token !== this.artworkLookupToken) return
+      if (res.url) {
+        this.artworkUrl = res.url
+        this.log(`artwork: matched ${res.source} (${res.matchType ?? 'match'}, confidence ${res.confidence}) for "${track.title}"`)
+
+        // Extract palette from the high-resolution artwork if not already cached
+        const cachedBg = this.bgPaletteCache.get(track.key)
+        if (!cachedBg && res.url.startsWith('http')) {
+          void fetch(res.url)
+            .then((r) => r.arrayBuffer())
+            .then((buf) => {
+              if (token !== this.artworkLookupToken) return
+              const image = nativeImage.createFromBuffer(Buffer.from(buf))
+              if (!image.isEmpty()) {
+                const small = image.resize({ width: 64, height: 64, quality: 'good' })
+                const { width, height } = small.getSize()
+                const bitmap = small.toBitmap()
+                this.albumPalette = extractPalette(bitmap, width, height)
+                this.albumBgPalette = extractBackgroundPalette(bitmap, width, height)
+                if (this.albumBgPalette) this.bgPaletteCache.set(track.key, this.albumBgPalette)
+                this.refresh()
+              }
+            })
+            .catch(() => {})
+        }
+        this.refresh()
+      }
+    } catch (err) {
+      this.log(`artwork: lookup failed (${String(err)})`)
+    }
+  }
+
   private onAnchor(anchor: PlaybackAnchor): void {
     const changedPlaying = this.anchor?.playing !== anchor.playing
     this.anchor = anchor
@@ -255,7 +304,10 @@ export class AppController {
       }
       this.artUrlCache.set(art.key, dataUrl)
     }
-    this.artworkUrl = dataUrl
+    // Only set as current artworkUrl if no high-res external artwork has been set yet
+    if (!this.artworkUrl || !this.artworkUrl.startsWith('http')) {
+      this.artworkUrl = dataUrl
+    }
 
     const cachedBg = this.bgPaletteCache.get(art.key)
     if (cachedBg) {
