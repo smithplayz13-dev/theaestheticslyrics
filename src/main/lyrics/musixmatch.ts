@@ -8,6 +8,7 @@ export interface MusixmatchTrack {
   artist: string
   album: string
   durationSec: number
+  artworkUrl?: string
 }
 
 export type MusixmatchResult =
@@ -65,7 +66,7 @@ function readRichsyncBody(envelope: Record<string, unknown>): unknown | null {
 
 interface Candidate {
   id: number
-  meta: SongMeta
+  meta: SongMeta & { artworkUrl?: string }
 }
 
 function toCandidates(reply: Record<string, unknown>): Candidate[] {
@@ -79,6 +80,12 @@ function toCandidates(reply: Record<string, unknown>): Candidate[] {
     if (track.has_richsync === 0 || track.instrumental === 1) continue
     const title = typeof track.track_name === 'string' ? track.track_name : ''
     if (!title) continue
+    const artworkUrl =
+      (typeof track.album_coverart_800x800 === 'string' && track.album_coverart_800x800) ||
+      (typeof track.album_coverart_500x500 === 'string' && track.album_coverart_500x500) ||
+      (typeof track.album_coverart_350x350 === 'string' && track.album_coverart_350x350) ||
+      (typeof track.album_coverart_100x100 === 'string' && track.album_coverart_100x100) ||
+      undefined
     candidates.push({
       id: track.track_id,
       meta: {
@@ -90,7 +97,8 @@ function toCandidates(reply: Record<string, unknown>): Candidate[] {
         durationSec:
           typeof track.track_length === 'number' && track.track_length > 0 && track.track_length < 36_000
             ? track.track_length
-            : 0
+            : 0,
+        ...(artworkUrl ? { artworkUrl } : {})
       }
     })
   }
@@ -192,11 +200,18 @@ export class MusixmatchProvider {
       }
       const richsyncBody = readRichsyncBody(reply.body)
       if (Array.isArray(richsyncBody) && richsyncBody.length) {
-        const { title, artist, album, durationSec } = candidate.meta
+        const { title, artist, album, durationSec, artworkUrl } = candidate.meta
         return {
           kind: 'found',
           body: richsyncBody,
-          track: { id: candidate.id, title, artist, album: album ?? '', durationSec }
+          track: {
+            id: candidate.id,
+            title,
+            artist,
+            album: album ?? '',
+            durationSec,
+            ...(artworkUrl ? { artworkUrl } : {})
+          }
         }
       }
       failure ??= 'richsync payload unusable'

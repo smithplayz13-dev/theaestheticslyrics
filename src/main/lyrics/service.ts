@@ -27,6 +27,7 @@ export interface LyricsResult {
   status: 'found' | 'not-found' | 'instrumental' | 'error'
   lyrics: TimedLyrics | null
   source?: 'local' | 'cache' | 'lrclib' | 'netease' | 'musixmatch' | 'karalyr' | 'betterlyrics'
+  artworkUrl?: string | null
 }
 
 const durationOrUndefined = (ms: number): number | undefined => (ms > 0 ? ms : undefined)
@@ -147,10 +148,11 @@ export class LyricsService {
         ...(line.status === 'found' ? { record: line.record } : {}),
         yrc: word.yrc,
         wordChecked: true,
+        artworkUrl: word.song.artworkUrl,
         fetchedAt: this.now()
       }
       await this.save(key, entry)
-      return { status: 'found', lyrics: wordLyrics, source: 'netease' }
+      return { status: 'found', lyrics: wordLyrics, source: 'netease', artworkUrl: word.song.artworkUrl ?? null }
     }
 
     if (line.status === 'error') {
@@ -203,14 +205,15 @@ export class LyricsService {
     provider: Exclude<LyricsProvider, 'auto' | 'local'>
   ): LyricsResult | null {
     const source = provider
-    if (entry.status === 'instrumental') return { status: 'instrumental', lyrics: null, source }
+    const artworkUrl = entry.artworkUrl ?? null
+    if (entry.status === 'instrumental') return { status: 'instrumental', lyrics: null, source, artworkUrl }
     if (entry.status === 'not-found') return { status: 'not-found', lyrics: null, source }
 
     switch (provider) {
       case 'lrclib': {
         if (!entry.record) return null
         const lyrics = recordToTimedLyrics(entry.record, q.durationMs)
-        return lyrics ? { status: 'found', lyrics, source } : null
+        return lyrics ? { status: 'found', lyrics, source, artworkUrl } : null
       }
       case 'karalyr': {
         // A Karalyr cache slot may hold either the structured karaoke payload or its
@@ -221,20 +224,20 @@ export class LyricsService {
           : entry.record
             ? recordToTimedLyrics(entry.record, q.durationMs)
             : null
-        return lyrics ? { status: 'found', lyrics, source } : null
+        return lyrics ? { status: 'found', lyrics, source, artworkUrl } : null
       }
       case 'betterlyrics': {
         const lyrics = entry.betterlyrics ? ttmlToTimedLyrics(entry.betterlyrics, q.durationMs) : null
-        return lyrics ? { status: 'found', lyrics, source } : null
+        return lyrics ? { status: 'found', lyrics, source, artworkUrl } : null
       }
       case 'netease': {
         const lyrics = entry.yrc ? yrcToTimedLyrics(entry.yrc, q.durationMs) : null
-        return lyrics ? { status: 'found', lyrics, source } : null
+        return lyrics ? { status: 'found', lyrics, source, artworkUrl } : null
       }
       case 'musixmatch': {
         const body = parseCachedJson(entry.musixmatch)
         const lyrics = body.ok ? richsyncToTimedLyrics(body.value, q.durationMs) : null
-        return lyrics ? { status: 'found', lyrics, source } : null
+        return lyrics ? { status: 'found', lyrics, source, artworkUrl } : null
       }
     }
   }
@@ -285,8 +288,14 @@ export class LyricsService {
       await this.save(key, { status: 'not-found', wordChecked: true, fetchedAt: this.now() })
       return { status: 'not-found', lyrics: null, source: 'netease' }
     }
-    await this.save(key, { status: 'found', yrc: word.yrc, wordChecked: true, fetchedAt: this.now() })
-    return { status: 'found', lyrics, source: 'netease' }
+    await this.save(key, {
+      status: 'found',
+      yrc: word.yrc,
+      wordChecked: true,
+      artworkUrl: word.song.artworkUrl,
+      fetchedAt: this.now()
+    })
+    return { status: 'found', lyrics, source: 'netease', artworkUrl: word.song.artworkUrl ?? null }
   }
 
   /**
@@ -322,7 +331,12 @@ export class LyricsService {
       this.deps.log('lyrics: musixmatch payload unusable')
       return null
     }
-    return { status: 'found', lyrics, source: 'musixmatch' }
+    return {
+      status: 'found',
+      lyrics,
+      source: 'musixmatch',
+      artworkUrl: found.track.artworkUrl ?? null
+    }
   }
 
   private async selectedMusixmatch(q: TrackQuery, key: string): Promise<LyricsResult> {
@@ -348,7 +362,12 @@ export class LyricsService {
     }
     const body = JSON.stringify(found.richsyncBody)
     if (typeof body === 'string') {
-      await this.save(key, { status: 'found', musixmatch: body, fetchedAt: this.now() })
+      await this.save(key, {
+        status: 'found',
+        musixmatch: body,
+        artworkUrl: found.track.artworkUrl,
+        fetchedAt: this.now()
+      })
     }
     return result
   }
@@ -502,8 +521,19 @@ export class LyricsService {
     if (word.status === 'found') {
       const lyrics = yrcToTimedLyrics(word.yrc, q.durationMs)
       if (lyrics) {
-        await this.save(key, { ...cached, status: 'found', yrc: word.yrc, wordChecked: true })
-        return { status: 'found', lyrics, source: 'netease' }
+        await this.save(key, {
+          ...cached,
+          status: 'found',
+          yrc: word.yrc,
+          wordChecked: true,
+          artworkUrl: word.song.artworkUrl ?? cached.artworkUrl
+        })
+        return {
+          status: 'found',
+          lyrics,
+          source: 'netease',
+          artworkUrl: word.song.artworkUrl ?? cached.artworkUrl ?? null
+        }
       }
     }
     await this.save(key, { ...cached, wordChecked: true })
@@ -528,23 +558,24 @@ export class LyricsService {
   }
 
   private fromEntry(entry: CacheEntry, q: TrackQuery, source: 'cache' | 'lrclib', useWords: boolean): LyricsResult {
+    const artworkUrl = entry.artworkUrl ?? null
     if (useWords && entry.yrc) {
       const lyrics = yrcToTimedLyrics(entry.yrc, q.durationMs)
-      if (lyrics) return { status: 'found', lyrics, source }
+      if (lyrics) return { status: 'found', lyrics, source, artworkUrl }
     }
     // Karalyr payloads carry the publisher's own word timing, so the word-level toggle (a
     // NetEase switch) does not gate them; they beat the line-level LRCLIB record below.
     const karalyr = parseKaraLyrPayload(entry.karalyr)
     if (karalyr) {
       const lyrics = karalyrToTimedLyrics(karalyr, q.durationMs)
-      if (lyrics) return { status: 'found', lyrics, source }
+      if (lyrics) return { status: 'found', lyrics, source, artworkUrl }
     }
     if (entry.betterlyrics) {
       const lyrics = ttmlToTimedLyrics(entry.betterlyrics, q.durationMs)
-      if (lyrics) return { status: 'found', lyrics, source }
+      if (lyrics) return { status: 'found', lyrics, source, artworkUrl }
     }
-    if (entry.status === 'instrumental') return { status: 'instrumental', lyrics: null, source }
+    if (entry.status === 'instrumental') return { status: 'instrumental', lyrics: null, source, artworkUrl }
     const lyrics = entry.status === 'found' && entry.record ? recordToTimedLyrics(entry.record, q.durationMs) : null
-    return lyrics ? { status: 'found', lyrics, source } : { status: 'not-found', lyrics: null, source }
+    return lyrics ? { status: 'found', lyrics, source, artworkUrl } : { status: 'not-found', lyrics: null, source }
   }
 }

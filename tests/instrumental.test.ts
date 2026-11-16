@@ -244,6 +244,58 @@ describe('InstrumentalPresenter', () => {
     expect(containerClasses.has('active')).toBe(false)
     expect(stageClasses.has('dimmed')).toBe(false)
   })
+
+  it('updates track metadata (title and artist) and handles missing fields gracefully', () => {
+    const titleTarget = { textContent: null as string | null, hidden: false }
+    const artistTarget = { textContent: null as string | null, hidden: false }
+    const metaContainer = { classList: { add: () => {}, remove: () => {} }, hidden: false }
+
+    const presenter = new InstrumentalPresenter({
+      container: { classList: { add: () => {}, remove: () => {} } },
+      stage: { classList: { add: () => {}, remove: () => {} } },
+      img: { src: '', removeAttribute: () => {} },
+      titleEl: titleTarget,
+      artistEl: artistTarget,
+      metaContainer
+    })
+
+    // 1. Full metadata
+    presenter.setTrack({
+      key: 'test:1',
+      title: 'Bohemian Rhapsody',
+      artist: 'Queen',
+      album: 'A Night at the Opera',
+      durationMs: 354_000,
+      app: 'spotify'
+    })
+    expect(presenter.currentTrack?.title).toBe('Bohemian Rhapsody')
+    expect(titleTarget.textContent).toBe('Bohemian Rhapsody')
+    expect(titleTarget.hidden).toBe(false)
+    expect(artistTarget.textContent).toBe('Queen')
+    expect(artistTarget.hidden).toBe(false)
+    expect(metaContainer.hidden).toBe(false)
+
+    // 2. Missing artist
+    presenter.setTrack({
+      key: 'test:2',
+      title: 'Solo Piano',
+      artist: '',
+      album: 'Album',
+      durationMs: 180_000,
+      app: 'spotify'
+    })
+    expect(titleTarget.textContent).toBe('Solo Piano')
+    expect(titleTarget.hidden).toBe(false)
+    expect(artistTarget.hidden).toBe(true)
+    expect(metaContainer.hidden).toBe(false)
+
+    // 3. Null track
+    presenter.setTrack(null)
+    expect(presenter.currentTrack).toBeNull()
+    expect(titleTarget.hidden).toBe(true)
+    expect(artistTarget.hidden).toBe(true)
+    expect(metaContainer.hidden).toBe(true)
+  })
 })
 
 describe('provider compatibility with instrumental break detection', () => {

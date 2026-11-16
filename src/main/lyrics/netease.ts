@@ -8,6 +8,7 @@ export interface NeteaseSong {
   artist: string
   album: string
   durationSec: number
+  artworkUrl?: string
 }
 
 export type NeteaseResult =
@@ -32,13 +33,15 @@ function toSongs(body: Record<string, unknown>): NeteaseSong[] {
   return songs.flatMap((s: unknown) => {
     if (!isRecord(s) || typeof s.id !== 'number' || typeof s.name !== 'string') return []
     const artists = Array.isArray(s.ar) ? s.ar.map((a: unknown) => (isRecord(a) && typeof a.name === 'string' ? a.name : '')) : []
+    const picUrl = isRecord(s.al) && typeof s.al.picUrl === 'string' && s.al.picUrl ? s.al.picUrl.replace(/^http:\/\//i, 'https://') : undefined
     return [
       {
         id: s.id,
         title: s.name,
         artist: artists.filter(Boolean).join(', '),
         album: isRecord(s.al) && typeof s.al.name === 'string' ? s.al.name : '',
-        durationSec: typeof s.dt === 'number' ? s.dt / 1000 : 0
+        durationSec: typeof s.dt === 'number' ? s.dt / 1000 : 0,
+        ...(picUrl ? { artworkUrl: picUrl } : {})
       }
     ]
   })

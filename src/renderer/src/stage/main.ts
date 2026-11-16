@@ -25,6 +25,9 @@ const presenter = new InstrumentalPresenter({
   img: document.getElementById('instrumental-img')! as HTMLImageElement,
   glowImg: document.getElementById('instrumental-glow-img') as HTMLImageElement | null,
   stage: root,
+  titleEl: document.getElementById('instrumental-title'),
+  artistEl: document.getElementById('instrumental-artist'),
+  metaContainer: document.getElementById('instrumental-meta'),
   setPresentationState: (state) => {
     document.body.dataset.presentation = state
   }
@@ -71,6 +74,7 @@ function applyState(state: StageState): void {
   palette = state.config.palette
   applyPaletteVars(palette)
   bgManager.setPalette(state.backgroundPalette)
+  presenter.setTrack(state.track)
   presenter.setArtwork(state.artworkUrl ?? null)
   presenter.setLyrics(state.lyrics, state.track?.durationMs ?? 0)
   clock.setOffset(state.config.offsetMs)

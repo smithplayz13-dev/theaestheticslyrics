@@ -97,4 +97,20 @@ describe('NeteaseClient.find', () => {
     ])
     expect((await client(s.fetch).find(query)).status).toBe('not-found')
   })
+
+  it('extracts album artwork URL and upgrades http to https', async () => {
+    const songWithPic = {
+      id: 8,
+      name: 'Paper Lanterns',
+      ar: [{ name: 'Lantern Test Band' }],
+      al: { name: 'Fixtures', picUrl: 'http://p1.music.126.net/abc123/art.jpg' },
+      dt: 32_000
+    }
+    const s = scripted([
+      { body: { code: 200, result: { songs: [songWithPic] } } },
+      { body: { code: 200, yrc: { lyric: YRC } } }
+    ])
+    const res = await client(s.fetch).find(query)
+    expect(res.status === 'found' && res.song.artworkUrl).toBe('https://p1.music.126.net/abc123/art.jpg')
+  })
 })

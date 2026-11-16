@@ -1,4 +1,4 @@
-import type { TimedLyrics } from '@shared/types'
+import type { TimedLyrics, TrackInfo } from '@shared/types'
 
 export type PresentationState =
   | 'lyrics'
@@ -97,6 +97,7 @@ export interface InstrumentalDomTarget {
     add(className: string): void
     remove(className: string): void
   }
+  hidden?: boolean | string
 }
 
 export interface InstrumentalImageTarget {
@@ -104,11 +105,19 @@ export interface InstrumentalImageTarget {
   removeAttribute(qualifiedName: string): void
 }
 
+export interface InstrumentalTextTarget {
+  textContent: string | null
+  hidden: boolean | string
+}
+
 export interface InstrumentalPresenterElements {
   container: InstrumentalDomTarget
   img: InstrumentalImageTarget
   glowImg?: InstrumentalImageTarget | null
   stage: InstrumentalDomTarget
+  titleEl?: InstrumentalTextTarget | null
+  artistEl?: InstrumentalTextTarget | null
+  metaContainer?: InstrumentalDomTarget | null
   setPresentationState?: (state: PresentationState) => void
 }
 
@@ -119,6 +128,7 @@ export class InstrumentalPresenter {
   private gaps: InstrumentalGap[] = []
   private state: PresentationState = 'lyrics'
   private artworkUrl: string | null = null
+  private track: TrackInfo | null = null
   private lastAppliedState: PresentationState | null = null
 
   constructor(private readonly elements?: InstrumentalPresenterElements) {}
@@ -131,8 +141,32 @@ export class InstrumentalPresenter {
     return this.gaps
   }
 
+  get currentTrack(): TrackInfo | null {
+    return this.track
+  }
+
   setLyrics(lyrics: TimedLyrics | null, durationMs = 0): void {
     this.gaps = findInstrumentalGaps(lyrics, durationMs)
+  }
+
+  setTrack(track: TrackInfo | null): void {
+    this.track = track
+    if (!this.elements) return
+
+    const title = track?.title?.trim() ?? ''
+    const artist = track?.artist?.trim() ?? ''
+
+    if (this.elements.titleEl) {
+      this.elements.titleEl.textContent = title
+      this.elements.titleEl.hidden = !title
+    }
+    if (this.elements.artistEl) {
+      this.elements.artistEl.textContent = artist
+      this.elements.artistEl.hidden = !artist
+    }
+    if (this.elements.metaContainer) {
+      this.elements.metaContainer.hidden = !title && !artist
+    }
   }
 
   setArtwork(url: string | null): void {

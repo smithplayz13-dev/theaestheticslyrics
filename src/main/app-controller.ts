@@ -61,6 +61,7 @@ export class AppController {
   private albumPalette: Palette | null = null
   private albumBgPalette: BackgroundPalette | null = null
   private artworkUrl: string | null = null
+  private providerArtworkUrl: string | null = null
   private readonly bgPaletteCache = new BackgroundPaletteCache()
   private readonly artUrlCache = new Map<string, string>()
   private health: { ok: boolean; message?: string } = { ok: true }
@@ -191,6 +192,7 @@ export class AppController {
     this.albumPalette = null
     this.albumBgPalette = null
     this.artworkUrl = null
+    this.providerArtworkUrl = null
     this.anchor = null
     const token = ++this.lookupToken
     this.status = track?.title ? 'searching' : 'idle'
@@ -224,6 +226,9 @@ export class AppController {
     if (token !== this.lookupToken) return
     this.status = result.status
     this.timed = result.lyrics
+    if (result.artworkUrl) {
+      this.providerArtworkUrl = result.artworkUrl
+    }
     const detail = result.lyrics ? `, ${result.lyrics.lines.length} lines, ${result.lyrics.wordTiming} word timing` : ''
     this.log(`lyrics: ${result.status}${result.source ? ` (${result.source})` : ''}${detail}`)
     if (result.status === 'error') this.later(ERROR_RETRY_MS, () => void this.lookup(track, token))
@@ -311,6 +316,7 @@ export class AppController {
     const s = this.settings.get()
     const playing = this.anchor?.playing ?? false
     const hasLyrics = this.status === 'found' && this.timed !== null
+    const effectiveArtworkUrl = this.providerArtworkUrl || this.artworkUrl
     this.stage.update(
       {
         track: this.track,
@@ -318,7 +324,7 @@ export class AppController {
         style: s.style,
         palette: this.palette(),
         offsetMs: s.offsetMs,
-        artworkUrl: this.artworkUrl,
+        artworkUrl: effectiveArtworkUrl,
         backgroundPalette: this.albumBgPalette
       },
       { playing, hasLyrics }

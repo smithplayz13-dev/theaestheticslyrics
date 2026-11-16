@@ -388,4 +388,18 @@ describe('LyricsService with Musixmatch first', () => {
     expect(await s.service.get(query)).toMatchObject({ status: 'found', source: 'lrclib' })
     expect(s.logs.some((m) => m.includes('musixmatch payload unusable'))).toBe(true)
   })
+
+  it('propagates artworkUrl from Musixmatch when available', async () => {
+    const s = serviceSetup(
+      async () => ({
+        status: 'found',
+        richsyncBody: COMPLETE_BODY,
+        track: { ...mxTrack, artworkUrl: 'https://s.mxmcdn.net/images-storage/albums5/800x800.jpg' }
+      }),
+      async () => ({ status: 'not-found' })
+    )
+    const result = await s.service.get(query)
+    expect(result.status).toBe('found')
+    expect(result.artworkUrl).toBe('https://s.mxmcdn.net/images-storage/albums5/800x800.jpg')
+  })
 })

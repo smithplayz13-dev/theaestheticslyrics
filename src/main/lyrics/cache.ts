@@ -19,6 +19,7 @@ export interface CacheEntry {
   betterlyrics?: string
   /** The word-timing question is settled for this song (entries without it get checked once). */
   wordChecked?: boolean
+  artworkUrl?: string
   fetchedAt: number
 }
 
