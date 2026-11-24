@@ -9,7 +9,11 @@ import type { FindResult, LrclibClient } from '../src/main/lyrics/lrclib'
 import type { LrclibRecord, TrackQuery } from '../src/main/lyrics/match'
 import type { MusixmatchProvider, MusixmatchResult } from '../src/main/lyrics/musixmatch'
 import type { NeteaseClient, NeteaseResult } from '../src/main/lyrics/netease'
+import type { BetterLyricsPortatoClient, PortatoResult } from '../src/main/lyrics/portato'
+import { portatoToTimedLyrics } from '../src/main/lyrics/portato'
 import { LyricsService } from '../src/main/lyrics/service'
+import type { UnisonClient, UnisonResult } from '../src/main/lyrics/unison'
+import { unisonToTimedLyrics } from '../src/main/lyrics/unison'
 import type { LyricsProvider } from '../src/main/settings'
 
 const fixtures = join(__dirname, 'fixtures')
@@ -113,6 +117,8 @@ interface SetupOptions {
   karalyr?: () => Promise<KaraLyrResult>
   musixmatch?: () => Promise<MusixmatchResult>
   netease?: () => Promise<NeteaseResult>
+  portato?: () => Promise<PortatoResult>
+  unison?: () => Promise<UnisonResult>
 }
 
 function setup(opts: SetupOptions) {
@@ -123,6 +129,8 @@ function setup(opts: SetupOptions) {
   const karalyrFind = vi.fn(opts.karalyr ?? (async (): Promise<KaraLyrResult> => ({ status: 'not-found' })))
   const mxFind = vi.fn(opts.musixmatch ?? (async (): Promise<MusixmatchResult> => ({ status: 'not-found' })))
   const neFind = vi.fn(opts.netease ?? (async (): Promise<NeteaseResult> => ({ status: 'not-found' })))
+  const portatoFind = vi.fn(opts.portato ?? (async (): Promise<PortatoResult> => ({ status: 'not-found' })))
+  const unisonFind = vi.fn(opts.unison ?? (async (): Promise<UnisonResult> => ({ status: 'not-found' })))
   const state = { provider: opts.provider, wordEnabled: opts.wordEnabled ?? true }
 
   const service = new LyricsService({
@@ -132,11 +140,13 @@ function setup(opts: SetupOptions) {
     log: () => {},
     primary: { client: { find: mxFind } as unknown as Pick<MusixmatchProvider, 'find'> },
     karalyr: { client: { find: karalyrFind } as unknown as Pick<KaraLyrClient, 'find'> },
+    portato: { client: { find: portatoFind } as unknown as Pick<BetterLyricsPortatoClient, 'find'> },
+    unison: { client: { find: unisonFind } as unknown as Pick<UnisonClient, 'find'> },
     wordLevel: { client: { find: neFind } as unknown as Pick<NeteaseClient, 'find'>, enabled: () => state.wordEnabled },
     provider: () => state.provider
   })
 
-  return { base, local, cache, lrclibFind, karalyrFind, mxFind, neFind, state, service }
+  return { base, local, cache, lrclibFind, karalyrFind, mxFind, neFind, portatoFind, unisonFind, state, service }
 }
 
 describe('LyricsService provider selection', () => {
@@ -239,6 +249,65 @@ describe('LyricsService provider selection', () => {
     expect(await s.service.get(query)).toMatchObject({ status: 'found', source: 'musixmatch' })
     expect(s.mxFind).toHaveBeenCalledTimes(1)
     expect(await s.cache.get(providerCacheKey(query, 'musixmatch'))).toMatchObject({ status: 'found' })
+  })
+
+  it('uses only Portato and reuses its own payload cache', async () => {
+    const qrcPayload = '[500,3700](500,800,0)Paper (1300,1700,0)lanterns (3000,1200,0)drifting'
+    const s = setup({
+      provider: 'portato',
+      lrclib: async () => ({ status: 'found', record: record() }),
+      portato: async () => ({
+        status: 'found',
+        rawPayload: qrcPayload,
+        format: 'qrc',
+        lyrics: portatoToTimedLyrics(qrcPayload, 32_000)!
+      })
+    })
+
+    const result = await s.service.get(query)
+    expect(result).toMatchObject({ status: 'found', source: 'portato', syncQuality: 'word' })
+    expect(result.lyrics?.wordTiming).toBe('native')
+    expect(s.lrclibFind).not.toHaveBeenCalled()
+    expect(s.portatoFind).toHaveBeenCalledTimes(1)
+
+    expect(await s.service.get(query)).toMatchObject({ status: 'found', source: 'portato' })
+    expect(s.portatoFind).toHaveBeenCalledTimes(1)
+    expect(await s.cache.get(providerCacheKey(query, 'portato'))).toMatchObject({ status: 'found' })
+  })
+
+  it('uses only Unison and reuses its own payload cache', async () => {
+    const unisonLyrics = unisonToTimedLyrics(
+      {
+        id: 'u-sel',
+        song: 'Paper Lanterns',
+        artist: 'Lantern Test Band',
+        lyrics: '[00:00.50] <00:00.50>Paper <00:01.30>lanterns <00:03.00>drifting',
+        format: 'lrc',
+        syncType: 'word'
+      },
+      32_000
+    )!
+    const s = setup({
+      provider: 'unison',
+      lrclib: async () => ({ status: 'found', record: record() }),
+      unison: async () => ({
+        status: 'found',
+        lyrics: unisonLyrics.lyrics,
+        syncQuality: 'word',
+        rawPayload: '[00:00.50] <00:00.50>Paper <00:01.30>lanterns <00:03.00>drifting',
+        attribution: { name: 'Unison', id: 'u-sel' }
+      })
+    })
+
+    const result = await s.service.get(query)
+    expect(result).toMatchObject({ status: 'found', source: 'unison', syncQuality: 'word' })
+    expect(result.lyrics?.wordTiming).toBe('native')
+    expect(s.lrclibFind).not.toHaveBeenCalled()
+    expect(s.unisonFind).toHaveBeenCalledTimes(1)
+
+    expect(await s.service.get(query)).toMatchObject({ status: 'found', source: 'unison' })
+    expect(s.unisonFind).toHaveBeenCalledTimes(1)
+    expect(await s.cache.get(providerCacheKey(query, 'unison'))).toMatchObject({ status: 'found' })
   })
 
   it('does not fall back when the selected provider misses', async () => {

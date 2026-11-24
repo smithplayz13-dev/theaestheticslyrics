@@ -1,4 +1,4 @@
-import type { TimedLyrics } from '@shared/types'
+import type { LyricsSource, SyncQuality, TimedLyrics } from '@shared/types'
 import type { LyricsProvider } from '../settings'
 import type { BetterLyricsClient, BetterLyricsResult } from './betterlyrics'
 import { ttmlToTimedLyrics } from './betterlyrics'
@@ -19,15 +19,26 @@ import type { LrclibRecord, TrackQuery } from './match'
 import type { MusixmatchProvider, MusixmatchResult } from './musixmatch'
 import type { NeteaseClient, NeteaseResult } from './netease'
 import { cleanTitle, primaryArtist } from './normalize'
+import type { BetterLyricsPortatoClient, PortatoResult } from './portato'
+import { portatoToTimedLyrics } from './portato'
 import { richsyncToTimedLyrics } from './richsync'
+import type { UnisonClient, UnisonEntry, UnisonResult } from './unison'
+import { syncQualityScore, unisonToTimedLyrics } from './unison'
 import { buildTimedLyrics } from './word-timing'
 import { parseYrc } from './yrc'
 
 export interface LyricsResult {
   status: 'found' | 'not-found' | 'instrumental' | 'error'
   lyrics: TimedLyrics | null
-  source?: 'local' | 'cache' | 'lrclib' | 'netease' | 'musixmatch' | 'karalyr' | 'betterlyrics'
+  source?: LyricsSource
   artworkUrl?: string | null
+  syncQuality?: SyncQuality
+  attribution?: {
+    name: string
+    id?: string | number
+    submitter?: string
+    syncType?: string
+  }
 }
 
 const durationOrUndefined = (ms: number): number | undefined => (ms > 0 ? ms : undefined)
@@ -60,11 +71,17 @@ export interface LyricsServiceDeps {
   karalyr?: { client: Pick<KaraLyrClient, 'find'> }
   /** Optional Better Lyrics provider: syllable-timed TTML, asked after Karalyr. */
   betterLyrics?: { client: Pick<BetterLyricsClient, 'find'> }
+  /** Optional Better Lyrics Portato provider: QQ-Music-backed word-timed QRC/TTML. */
+  portato?: { client: Pick<BetterLyricsPortatoClient, 'find'> }
+  /** Optional Unison provider: community-contributed syllable, word, line, or unsynced lyrics. */
+  unison?: { client: Pick<UnisonClient, 'find'> }
   /** Optional source of real per-word timing (NetEase), consulted alongside LRCLIB. */
   wordLevel?: { client: Pick<NeteaseClient, 'find'>; enabled: () => boolean }
   /** Which source may answer a lookup; absent keeps the automatic fallback chain. */
   provider?: () => LyricsProvider
 }
+
+const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)
 
 type ParsedJson = { ok: true; value: unknown } | { ok: false }
 
@@ -128,11 +145,34 @@ export class LyricsService {
       return this.fromEntry(cached, q, 'cache', useWords)
     }
 
-    const karalyr = this.deps.karalyr ? await this.fromKaralyr(q, key) : null
-    if (karalyr) return karalyr
+    const karalyrPromise = this.deps.karalyr ? this.fromKaralyr(q, key) : Promise.resolve(null)
+    const betterPromise = this.deps.betterLyrics ? this.fromBetterLyrics(q, key) : Promise.resolve(null)
+    const portatoPromise = this.deps.portato ? this.fromPortato(q, key) : Promise.resolve(null)
+    const unisonPromise = this.deps.unison ? this.fromUnison(q, key) : Promise.resolve(null)
 
-    const better = this.deps.betterLyrics ? await this.fromBetterLyrics(q, key) : null
-    if (better) return better
+    const [karalyr, better, portato, unison] = await Promise.all([
+      karalyrPromise,
+      betterPromise,
+      portatoPromise,
+      unisonPromise
+    ])
+
+    const candidates = [karalyr, better, portato, unison].filter(
+      (r): r is LyricsResult => r !== null && r.status === 'found' && r.lyrics !== null
+    )
+
+    if (candidates.length > 0) {
+      candidates.sort((a, b) => {
+        const qA = syncQualityScore(a.syncQuality ?? (a.lyrics?.wordTiming === 'native' ? 'word' : 'line'))
+        const qB = syncQualityScore(b.syncQuality ?? (b.lyrics?.wordTiming === 'native' ? 'word' : 'line'))
+        return qB - qA
+      })
+      const best = candidates[0]!
+      const bestScore = syncQualityScore(best.syncQuality ?? (best.lyrics?.wordTiming === 'native' ? 'word' : 'line'))
+      if (bestScore >= 2) {
+        return best
+      }
+    }
 
     const [line, word] = await Promise.all([
       this.deps.client.find(q),
@@ -152,7 +192,19 @@ export class LyricsService {
         fetchedAt: this.now()
       }
       await this.save(key, entry)
-      return { status: 'found', lyrics: wordLyrics, source: 'netease', artworkUrl: word.song.artworkUrl ?? null }
+      return {
+        status: 'found',
+        lyrics: wordLyrics,
+        source: 'netease',
+        syncQuality: 'word',
+        artworkUrl: word.song.artworkUrl ?? null
+      }
+    }
+
+    // If a line-synced or unsynced candidate was found earlier from unison/karalyr/portato,
+    // compare it with LRCLIB before falling back.
+    if (candidates.length > 0) {
+      return candidates[0]!
     }
 
     if (line.status === 'error') {
@@ -190,6 +242,10 @@ export class LyricsService {
         return this.selectedKaralyr(q, key)
       case 'betterlyrics':
         return this.selectedBetterLyrics(q, key)
+      case 'portato':
+        return this.selectedPortato(q, key)
+      case 'unison':
+        return this.selectedUnison(q, key)
       case 'lrclib':
         return this.selectedLrclib(q, key)
       case 'netease':
@@ -228,7 +284,41 @@ export class LyricsService {
       }
       case 'betterlyrics': {
         const lyrics = entry.betterlyrics ? ttmlToTimedLyrics(entry.betterlyrics, q.durationMs) : null
-        return lyrics ? { status: 'found', lyrics, source, artworkUrl } : null
+        return lyrics ? { status: 'found', lyrics, source, artworkUrl, syncQuality: 'syllable' } : null
+      }
+      case 'portato': {
+        const lyrics = entry.portato ? portatoToTimedLyrics(entry.portato, q.durationMs) : null
+        return lyrics
+          ? {
+              status: 'found',
+              lyrics,
+              source,
+              artworkUrl,
+              syncQuality: lyrics.wordTiming === 'native' ? 'word' : 'line',
+              attribution: { name: 'Better Lyrics Portato' }
+            }
+          : null
+      }
+      case 'unison': {
+        if (!entry.unison) return null
+        const parsed = parseCachedJson(entry.unison)
+        if (!parsed.ok || !isRecord(parsed.value)) return null
+        const converted = unisonToTimedLyrics(parsed.value as UnisonEntry, q.durationMs)
+        return converted
+          ? {
+              status: 'found',
+              lyrics: converted.lyrics,
+              source,
+              artworkUrl,
+              syncQuality: converted.syncQuality,
+              attribution: {
+                name: 'Unison',
+                id: (parsed.value as UnisonEntry).id,
+                submitter: (parsed.value as UnisonEntry).submitter,
+                syncType: (parsed.value as UnisonEntry).syncType
+              }
+            }
+          : null
       }
       case 'netease': {
         const lyrics = entry.yrc ? yrcToTimedLyrics(entry.yrc, q.durationMs) : null
@@ -504,6 +594,156 @@ export class LyricsService {
     return result ?? { status: 'not-found', lyrics: null, source: 'betterlyrics' }
   }
 
+  /**
+   * Better Lyrics Portato: QQ-Music-backed word-level and syllable-level timing (QRC / TTML).
+   */
+  private async askPortato(q: TrackQuery): Promise<PortatoResult> {
+    try {
+      return await this.deps.portato!.client.find(q)
+    } catch (err) {
+      this.deps.log(`lyrics: portato failed (${String(err)})`)
+      return { status: 'error', message: String(err) }
+    }
+  }
+
+  private async fromPortato(q: TrackQuery, key: string): Promise<LyricsResult | null> {
+    if (!this.deps.portato) return null
+    const found = await this.askPortato(q)
+    if (found.status === 'error') {
+      this.deps.log(`lyrics: portato unavailable (${found.message})`)
+      return null
+    }
+    if (found.status !== 'found') return null
+    return this.usePortato(found, q, key)
+  }
+
+  private async usePortato(
+    found: Extract<PortatoResult, { status: 'found' }>,
+    q: TrackQuery,
+    key: string
+  ): Promise<LyricsResult | null> {
+    const lyrics = found.lyrics ?? portatoToTimedLyrics(found.rawPayload, q.durationMs)
+    if (!lyrics) {
+      this.deps.log('lyrics: portato payload unusable')
+      return null
+    }
+    await this.save(key, {
+      status: 'found',
+      portato: found.rawPayload,
+      source: 'portato',
+      syncQuality: lyrics.wordTiming === 'native' ? 'word' : 'line',
+      wordChecked: lyrics.wordTiming === 'native',
+      fetchedAt: this.now()
+    })
+    return {
+      status: 'found',
+      lyrics,
+      source: 'portato',
+      syncQuality: lyrics.wordTiming === 'native' ? 'word' : 'line',
+      attribution: {
+        name: 'Better Lyrics Portato'
+      }
+    }
+  }
+
+  private async selectedPortato(q: TrackQuery, key: string): Promise<LyricsResult> {
+    if (!this.deps.portato) return { status: 'not-found', lyrics: null, source: 'portato' }
+    const found = await this.askPortato(q)
+    if (found.status === 'error') {
+      this.deps.log(`lyrics: portato unavailable (${found.message})`)
+      return { status: 'error', lyrics: null, source: 'portato' }
+    }
+    if (found.status !== 'found') {
+      await this.save(key, { status: 'not-found', fetchedAt: this.now() })
+      return { status: 'not-found', lyrics: null, source: 'portato' }
+    }
+
+    const result = await this.usePortato(found, q, key)
+    if (!result) await this.save(key, { status: 'not-found', fetchedAt: this.now() })
+    return result ?? { status: 'not-found', lyrics: null, source: 'portato' }
+  }
+
+  /**
+   * Unison: community-contributed lyrics platform supporting richsync (syllable),
+   * word-synced, line-synced, and unsynchronized lyrics with community ranking.
+   */
+  private async askUnison(q: TrackQuery): Promise<UnisonResult> {
+    try {
+      return await this.deps.unison!.client.find(q)
+    } catch (err) {
+      this.deps.log(`lyrics: unison failed (${String(err)})`)
+      return { status: 'error', message: String(err) }
+    }
+  }
+
+  private async fromUnison(q: TrackQuery, key: string): Promise<LyricsResult | null> {
+    if (!this.deps.unison) return null
+    const found = await this.askUnison(q)
+    if (found.status === 'error') {
+      this.deps.log(`lyrics: unison unavailable (${found.message})`)
+      return null
+    }
+    if (found.status !== 'found') return null
+    return this.useUnison(found, q, key)
+  }
+
+  private async useUnison(
+    found: Extract<UnisonResult, { status: 'found' }>,
+    _q: TrackQuery,
+    key: string
+  ): Promise<LyricsResult | null> {
+    const { lyrics, syncQuality, rawPayload, attribution } = found
+    if (!lyrics || !lyrics.lines.length) {
+      this.deps.log('lyrics: unison payload unusable')
+      return null
+    }
+    const unisonJson = JSON.stringify({
+      lyrics: rawPayload,
+      syncQuality,
+      format: syncQuality === 'syllable' ? 'ttml' : syncQuality === 'word' ? 'lrc' : 'plain',
+      syncType: attribution.syncType,
+      submitter: attribution.submitter,
+      id: attribution.id
+    })
+    await this.save(key, {
+      status: 'found',
+      unison: unisonJson,
+      source: 'unison',
+      syncQuality,
+      wordChecked: syncQuality === 'syllable' || syncQuality === 'word',
+      fetchedAt: this.now()
+    })
+    return {
+      status: 'found',
+      lyrics,
+      source: 'unison',
+      syncQuality,
+      attribution: {
+        name: 'Unison',
+        id: attribution.id,
+        submitter: attribution.submitter,
+        syncType: attribution.syncType
+      }
+    }
+  }
+
+  private async selectedUnison(q: TrackQuery, key: string): Promise<LyricsResult> {
+    if (!this.deps.unison) return { status: 'not-found', lyrics: null, source: 'unison' }
+    const found = await this.askUnison(q)
+    if (found.status === 'error') {
+      this.deps.log(`lyrics: unison unavailable (${found.message})`)
+      return { status: 'error', lyrics: null, source: 'unison' }
+    }
+    if (found.status !== 'found') {
+      await this.save(key, { status: 'not-found', fetchedAt: this.now() })
+      return { status: 'not-found', lyrics: null, source: 'unison' }
+    }
+
+    const result = await this.useUnison(found, q, key)
+    if (!result) await this.save(key, { status: 'not-found', fetchedAt: this.now() })
+    return result ?? { status: 'not-found', lyrics: null, source: 'unison' }
+  }
+
   private async findWords(q: TrackQuery): Promise<NeteaseResult> {
     try {
       const result = await this.deps.wordLevel!.client.find(q)
@@ -572,7 +812,41 @@ export class LyricsService {
     }
     if (entry.betterlyrics) {
       const lyrics = ttmlToTimedLyrics(entry.betterlyrics, q.durationMs)
-      if (lyrics) return { status: 'found', lyrics, source, artworkUrl }
+      if (lyrics) return { status: 'found', lyrics, source, artworkUrl, syncQuality: 'syllable' }
+    }
+    if (entry.portato) {
+      const lyrics = portatoToTimedLyrics(entry.portato, q.durationMs)
+      if (lyrics) {
+        return {
+          status: 'found',
+          lyrics,
+          source,
+          artworkUrl,
+          syncQuality: lyrics.wordTiming === 'native' ? 'word' : 'line',
+          attribution: { name: 'Better Lyrics Portato' }
+        }
+      }
+    }
+    if (entry.unison) {
+      const parsed = parseCachedJson(entry.unison)
+      if (parsed.ok && isRecord(parsed.value)) {
+        const converted = unisonToTimedLyrics(parsed.value as UnisonEntry, q.durationMs)
+        if (converted) {
+          return {
+            status: 'found',
+            lyrics: converted.lyrics,
+            source,
+            artworkUrl,
+            syncQuality: converted.syncQuality,
+            attribution: {
+              name: 'Unison',
+              id: (parsed.value as UnisonEntry).id,
+              submitter: (parsed.value as UnisonEntry).submitter,
+              syncType: (parsed.value as UnisonEntry).syncType
+            }
+          }
+        }
+      }
     }
     if (entry.status === 'instrumental') return { status: 'instrumental', lyrics: null, source, artworkUrl }
     const lyrics = entry.status === 'found' && entry.record ? recordToTimedLyrics(entry.record, q.durationMs) : null

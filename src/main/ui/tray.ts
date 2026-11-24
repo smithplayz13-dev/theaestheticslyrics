@@ -1,5 +1,15 @@
 import { Menu, Tray, nativeImage, type MenuItemConstructorOptions, type NativeImage } from 'electron'
-import { STYLE_IDS, STYLE_LABELS, type ColorRole, type LyricsStatus, type Palette, type ShowOn, type StyleId, type TrackInfo } from '@shared/types'
+import {
+  STYLE_IDS,
+  STYLE_LABELS,
+  type AmbientLightingSettings,
+  type ColorRole,
+  type LyricsStatus,
+  type Palette,
+  type ShowOn,
+  type StyleId,
+  type TrackInfo
+} from '@shared/types'
 import type { IdleMinutes, LyricsProvider, PlayerSource, Settings } from '../settings'
 import { swatchBitmap } from './swatch'
 
@@ -20,11 +30,12 @@ export interface TrayActions {
   setShowOn(showOn: ShowOn): void
   setDisplay(id: number | null): void
   setAutoSync(on: boolean): void
-  editColors(role: ColorRole): void
+  editColors(role?: ColorRole | 'ambient'): void
   resetColors(): void
   showNow(): void
   setLockOnReturn(on: boolean): void
   setAmbientMode(on: boolean): void
+  setAmbientLighting(patch: Partial<AmbientLightingSettings>): void
   setOffset(ms: number): void
   setWordLevel(on: boolean): void
   setIdle(minutes: IdleMinutes): void
@@ -220,6 +231,8 @@ export class TrayMenu {
           },
           radio('Karalyr', s.lyricsProvider === 'karalyr', () => a.setLyricsProvider('karalyr')),
           radio('Better Lyrics (syllable timing)', s.lyricsProvider === 'betterlyrics', () => a.setLyricsProvider('betterlyrics')),
+          radio('Better Lyrics Portato (word timing)', s.lyricsProvider === 'portato', () => a.setLyricsProvider('portato')),
+          radio('Unison (community synced)', s.lyricsProvider === 'unison', () => a.setLyricsProvider('unison')),
           radio('LRCLIB', s.lyricsProvider === 'lrclib', () => a.setLyricsProvider('lrclib')),
           radio('NetEase', s.lyricsProvider === 'netease', () => a.setLyricsProvider('netease'))
         ]

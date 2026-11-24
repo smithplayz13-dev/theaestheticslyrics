@@ -1,7 +1,7 @@
 import { writeFileSync } from 'node:fs'
 import { BrowserWindow, app, ipcMain, powerMonitor, screen, type Display, type IpcMainEvent } from 'electron'
 import { IPC, type DismissRequest, type StageSessionInfo, type StageState } from '@shared/ipc'
-import type { BackgroundPalette, Palette, PlaybackAnchor, StyleId, TimedLyrics, TrackInfo } from '@shared/types'
+import type { AmbientLightingPalette, BackgroundPalette, Palette, PlaybackAnchor, StyleId, TimedLyrics, TrackInfo } from '@shared/types'
 import type { Log } from '../logger'
 import type { Settings } from '../settings'
 import { LOAD_STUCK_MS, LockSession, alwaysOverlayVisible, idleShouldOpen, loadedWithin, type LockReason } from './stage-logic'
@@ -24,6 +24,7 @@ export interface StageContent {
   offsetMs: number
   artworkUrl?: string | null
   backgroundPalette?: BackgroundPalette | null
+  ambientPalette?: AmbientLightingPalette | null
 }
 
 export interface StageControllerDeps {
@@ -398,10 +399,12 @@ export class StageController {
         palette: c.palette,
         offsetMs: c.offsetMs,
         mode: sw.kind === 'lock' ? 'lock' : 'always',
-        ambientMode: this.deps.settings().ambientMode
+        ambientMode: this.deps.settings().ambientMode,
+        ambientLighting: this.deps.settings().ambientLighting
       },
       artworkUrl: c.artworkUrl ?? null,
-      backgroundPalette: c.backgroundPalette ?? null
+      backgroundPalette: c.backgroundPalette ?? null,
+      ambientPalette: c.ambientPalette ?? null
     }
     sw.win.webContents.send(IPC.stageState, state)
   }

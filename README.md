@@ -9,7 +9,7 @@
   <a href="LICENSE"><img alt="MIT License" src="https://img.shields.io/badge/license-MIT-ca415e"></a>
 </p>
 
-**theaestheticslyrics** lights up the lyrics of the song you're playing one word at a time, right as each word is sung. It sits in the Windows system tray and follows Spotify, Apple Music or the [Kodama](https://github.com/KiyoshiTheDevil/Kodama) YouTube Music client. The lyrics show on a full-screen lyrics screen when you step away, or float over your desktop while you work.
+**theaestheticslyrics** lights up the lyrics of the song you're playing one word at a time, right as each word is sung. It sits in the Windows system tray and follows Spotify, Apple Music or the [Kodama](https://github.com/KiyoshiTheDevil/Kodama) YouTube Music client. The lyrics show on a full-screen lyrics screen when you step away, float over your desktop while you work, or expand into an immersive split-screen Ambient Mode with full playback controls.
 
 It's a Windows take on [Verci](https://verci.xyz), a Mac app. It's free and open source, and you don't need an account or an API key.
 
@@ -24,17 +24,38 @@ It's a Windows take on [Verci](https://verci.xyz), a Mac app. It's free and open
 
 **Tip:** to put an icon on your desktop, right-click `theaestheticslyrics.exe`, then **Show more options → Send to → Desktop (create shortcut)**. Opening that icon while the app is already running shows the lyrics right away.
 
-## Four styles
+## Five Visualization Styles
 
 | Ship | Fisheye |
 |:---:|:---:|
 | <img src="docs/images/style-ship.png" alt="Ship style" width="420"> | <img src="docs/images/style-fisheye.png" alt="Fisheye style" width="420"> |
-| Words stack into a wall that drifts in 3D. The word being sung pops forward on a highlight box. | A convex stack of words under a real glass-lens shader. The word being sung sits closest to the glass. |
+| Words stack into a wall that drifts in 3D. The word being sung pops forward on a highlight box. | A convex stack of words under a WebGL glass-lens shader. The word being sung sits closest to the glass. |
 | **Fisheye Visual** | **Visual** |
 | <img src="docs/images/style-fisheye-visual.png" alt="Fisheye Visual style" width="420"> | <img src="docs/images/style-visual.png" alt="Visual style" width="420"> |
-| The same lens, with icons beside the words. | One word at a time, with a matching icon or emoji beside it. About 800 words have one. |
+| The same WebGL lens, with matching Fluent icons beside the words. | One word at a time, with a matching icon or emoji popping in beside it. |
+
+### Codestyle (New!)
+A developer-focused coding environment aesthetic. Lyrics are rendered as tokenized syntax within an authentic code editor canvas featuring line numbers, keyword highlight boxes, active line indicator, and an editor status bar. Codestyle features an **invariant dark gradient background** (`#0b0a09` &rarr; `#060607` &rarr; `#000000`) that preserves its distinct terminal identity across all playback states and transitions.
 
 *The screenshots use an original demo song written for this project.*
+
+## Ambient Mode (Fullscreen Player)
+
+Press **A** (or click the expand toggle in the top-right corner, or select tray &rarr; **Ambient Mode (Fullscreen Player)**) to switch to the immersive Ambient Mode.
+
+- **Split-Screen Experience:**
+  - **Left Side:** Active lyrics visualization adapted dynamically to the selected style.
+  - **Right Side:** High-resolution album artwork card, track title, artist, live interactive seekbar with elapsed and total time, and media controls (Play / Pause, Next, Previous).
+- **Artwork-Derived Ambient Glow:** A large, breathing, blurred glow derived from the album cover art fills the background, adding rich depth and atmosphere.
+- **Style-Aware Adaptation:**
+  - **Ship & Visual:** Lyrics float cleanly over the ambient glow and artwork-derived gradient.
+  - **Fisheye & Fisheye-Visual:** Refactored WebGL lens shader preserves transparency so ambient glow and backgrounds shine through the glass, while disabling clock fades to ensure full word stack visibility.
+  - **Codestyle:** Retains its invariant code editor background, pinning the code editor on the left and ambient artwork on the right without introducing album color washes over the editor.
+- **Automatic Instrumental Gap Transitions:**
+  - Automatically detects extended instrumental breaks (&ge; 8 seconds) in timed lyrics.
+  - Crossfades smoothly (500ms) away from the lyrics to focus on the centered album artwork card.
+  - Seamlessly restores the lyrics presentation ~500ms before the next vocal begins.
+  - Supports seeking into or out of gaps, track changes, and paused playback without visual jumps.
 
 ## How to use it
 
@@ -52,28 +73,29 @@ Pick one in tray → **Show Lyrics**.
   - **Lock Windows When I Come Back** (off by default) turns Ctrl+Alt+L into "lock my PC with lyrics". Any key or mouse move then closes the lyrics and locks Windows, so your PIN or password is needed.
 - **Always.** The words float above everything. Clicks go straight through them, and they hide 3 seconds after you pause.
 
-### Colours
+### Dynamic Background & Colours
 
-- The default palette is red for sung words, a pink highlight and soft pink for words still to come.
-- **Auto Sync** takes the colours from the album art and keeps them readable on black.
-- **Lyric Text…**, **Highlight…** and **Secondary Text…** let you pick your own colours. **Reset Colors** goes back to the defaults.
+- **Dynamic Artwork Background:** Automatically extracts dominant and secondary colors from album artwork and renders smooth, dual-layer crossfading background gradients.
+- **Lyrics Colors Window:** Pick tray &rarr; **Lyric Text…**, **Highlight…**, or **Secondary Text…** to open the dedicated Lyrics Colors window.
+  - **Auto Sync:** Automatically extracts readable lyric text, highlight box, and upcoming word colors directly from the album art.
+  - **Custom Palette Wells:** Choose your own hex colors for sung words, the active highlight box, and upcoming lines.
+  - **Reset Colors:** Reverts to the default aesthetic palette (crimson, rose highlight, and soft pink).
 
-### Everything else in the tray
+### Everything in the tray
 
 | Setting | What it does |
 |---|---|
 | **Display** | Picks the monitor the lyrics appear on. |
-| **Style** | Ship, Fisheye, Fisheye Visual or Visual. |
+| **Style** | Ship, Fisheye, Fisheye Visual, Visual, or Codestyle. |
+| **Ambient Mode (Fullscreen Player)** | Toggles the split-screen player with album art card and controls (hotkey **A**). |
 | **Timing** | Shifts the words earlier or later. Bluetooth headphones usually need *0.25–0.5 s Later*. |
-| **Precise Word Timing (NetEase)** | Uses real per-word timing when NetEase has the song in *Automatic* (see below). Pinning *NetEase* uses it regardless of this toggle. |
+| **Precise Word Timing (NetEase)** | Uses real per-word timing when NetEase has the song in *Automatic*. |
 | **Players** | *Spotify and Apple Music* (the default), *Kodama* only, or *All Media Apps* (browsers and anything else that shows in Windows' media controls). |
-| **Lyrics Provider** | *Automatic* (the default) uses every source below in order. Pick *Local Files Only*, *Musixmatch*, *Karalyr*, *Better Lyrics*, *LRCLIB* or *NetEase* to use only that source. |
+| **Lyrics Provider** | *Automatic* (the default) uses every source below in order. Pick *Local Files Only*, *Musixmatch*, *Karalyr*, *Better Lyrics*, *Better Lyrics Portato*, *Unison*, *LRCLIB* or *NetEase* to use only that source. |
 | **Open Lyrics Folder** | Opens the folder for your own `.lrc` files. |
 | **Start with Windows** | Starts the app quietly in the tray when you sign in. |
 
 While a song with lyrics plays, your display stays awake. When the music stops, Windows' normal sleep and lock timers take over again.
-
-By default, built-in sources ask [Karalyr](https://karalyr.com) first for word-by-word karaoke timing, then [Better Lyrics](https://docs.betterlyrics.org) for syllable timing, then [LRCLIB](https://lrclib.net) and [NetEase](https://music.163.com). Developers who paste their own [Musixmatch](https://developer.musixmatch.com) key into `src/main/secrets.ts` (copy the included `secrets.example.ts`; the file stays uncommitted) get Musixmatch's word-by-word timing too — with no key, everything still works through the usual fallbacks. Pin one source in tray → **Lyrics Provider** when you want to skip the fallbacks entirely.
 
 ### Following Kodama (YouTube Music)
 
@@ -82,56 +104,48 @@ By default, built-in sources ask [Karalyr](https://karalyr.com) first for word-b
 - Pick tray → **Players → Kodama** to follow only Kodama. Browsers and other apps stop competing for the lyrics, even with a paused YouTube session in the background.
 - **All Media Apps** follows Kodama too, but it prefers whatever Windows considers the current session, so a second playing app can take over the lyrics. Choose *Kodama* when you want it to be the one and only source.
 
-Two things to know, both coming from how Kodama updates Windows' media timeline (about every 15 seconds):
-
-- After you seek inside Kodama, the lyrics catch up to the new spot at its next update — up to ~15 s. Pausing, resuming and changing tracks appear right away (within a second or so).
-- The album art and the exact song length can lag a few seconds at first, while Windows fetches the YouTube thumbnail and Kodama learns the real duration. Lyrics matching adapts while the length is unknown.
-
 ## Where the lyrics come from
 
-In **Automatic**, four free sources are tried in order:
+In **Automatic**, free sources are tried in order and prioritized by synchronization quality (**syllable > word > line > unsynced**):
 
-- **[Karalyr](https://karalyr.com)**, an open karaoke lyrics database with real *word-by-word* timing for its songs. It is asked first; if it doesn't have the track, the app silently moves on.
-- **[Better Lyrics](https://docs.betterlyrics.org)**, a cache-first API that serves Apple-Music-style TTML with *syllable-level* timing. Cached songs need no key; a song it has not seen is a quick miss and the app moves on. Set `BETTER_LYRICS_API_KEY` only if you have one, or point `BETTER_LYRICS_PROXY_URL` at the bundled proxy.
-- **[LRCLIB](https://lrclib.net)**, an open, community-run lyrics database. It has exact *line* timing for a huge number of songs. Inside each line, the app estimates when each word is sung from its syllables, punctuation and the song's pace. Every line re-syncs to the real time, so small errors never add up.
-- **NetEase Cloud Music**, through its public but undocumented web API. For many songs it has real *per-word* timing, so every word lights exactly when it's sung. You can turn it off in the tray.
+1. **[Karalyr](https://karalyr.com)**: Open karaoke lyrics database with real *word-by-word* timing.
+2. **[Better Lyrics](https://docs.betterlyrics.org)**: Cache-first API delivering Apple-Music-style TTML with *syllable-level* timing.
+3. **Better Lyrics Portato**: Word-level synchronized lyrics and karaoke timing associated with QQ Music (via QRC / TTML).
+4. **Better Lyrics Unison**: Community-contributed lyrics platform (`https://unison.betterlyrics.org`) supporting syllable, word, line, and unsynchronized community lyrics.
+5. **[LRCLIB](https://lrclib.net)**: Open, community-run lyrics database with exact *line* timing for a vast catalog of tracks. Inside each line, the app estimates word timing from syllables and punctuation.
+6. **NetEase Cloud Music**: Web API providing real *per-word* timing for supported tracks.
+7. **[Musixmatch](https://developer.musixmatch.com)**: Developers can paste their own API key into `src/main/secrets.ts` (from `secrets.example.ts`) for word-by-word timing.
+8. **Local Files**: Drop `.lrc` files into `%APPDATA%\theaestheticslyrics\Lyrics`, named `Artist - Title.lrc`. Enhanced LRC with `<mm:ss.xx>` word tags is supported natively.
 
-If a Musixmatch key is configured, Musixmatch is asked before the cache and the free sources. LRCLIB and NetEase are asked at the same time; real per-word timing wins. Better Lyrics is asked before them, so its syllable timing is used whenever it has the song.
-
-**Lyrics Provider** in the tray pins one source. *Automatic* keeps the chain above, *Local Files Only* never goes online, and *Musixmatch*, *Karalyr*, *Better Lyrics*, *LRCLIB* or *NetEase* use only that source with no fallback. Each network mode has its own cache, so switching providers never shows another source's stored lyrics.
-
-In *Automatic*, your own lyrics come first. Put `.lrc` files in the lyrics folder (tray → **Open Lyrics Folder**, which is `%APPDATA%\theaestheticslyrics\Lyrics`), named `Artist - Title.lrc`. Enhanced LRC with `<mm:ss.xx>` word tags is used exactly as written. If you pin a provider, only that provider is used; choose **Local Files Only** to use just your own files.
-
-Lyrics you've played before load instantly from a local cache. Songs with no synced lyrics show nothing, and the tray tells you so.
+> [!NOTE]
+> **Ambient Rim Lighting (Experimental / Work in Progress):**
+> A native multi-layer, Lumn-inspired screen-edge ambient rim lighting system (with corner emitters, edge diffusion wash, and music-reactive breathing) is actively under development. While undergoing refinement and performance optimization, this feature is disabled by default and hidden from user-facing settings.
 
 ## Privacy
 
-- To look lyrics up, the app sends only the song's **title, artist, album and length** to the sources that can answer: `karalyr.com`, `api.betterlyrics.org`, `lrclib.net`, `music.163.com` when precise word timing is on (or NetEase is pinned), and `api.musixmatch.com` only if you added a Musixmatch key. Pinning a provider limits requests to that provider; *Local Files Only* makes no lyrics requests.
+- To look lyrics up, the app sends only the song's **title, artist, album and length** to the sources that can answer: `karalyr.com`, `api.betterlyrics.org`, `unison.betterlyrics.org`, `lrclib.net`, `music.163.com`, and `api.musixmatch.com` (if configured). Pinning a provider limits requests to that provider; *Local Files Only* makes no external requests.
 - It has no accounts, analytics, telemetry or ads.
-- Everything else stays on your PC, in `%APPDATA%\theaestheticslyrics`: settings, the lyrics cache, the log and your own lyrics.
+- Everything else stays on your PC in `%APPDATA%\theaestheticslyrics`: settings, the lyrics cache, logs, and local lyrics.
 
 ## Troubleshooting
 
 | Problem | Fix |
 |---|---|
 | The first launch takes a few seconds | Windows scans a newly downloaded app once. The lyrics screen appears as soon as the scan finishes, and later launches are instant. |
-| The tray says *Cannot read what is playing* | The app reads Windows' media controls through Windows PowerShell 5.1, which comes with Windows. Check that `C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe` exists and isn't blocked by a policy. The log (below) has the details. |
-| *No synced lyrics for …* | The selected source (or every source, in *Automatic*) has no timed lyrics for that song. Add your own `.lrc` file or choose another provider. |
-| **Musixmatch** is greyed out | It needs a Musixmatch API key in `src/main/secrets.ts`. Without one, the other sources still work. |
+| The tray says *Cannot read what is playing* | The app reads Windows' media controls through Windows PowerShell 5.1, which comes with Windows. Check that `C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe` exists and isn't blocked by a policy. |
+| *No synced lyrics for …* | The selected source has no timed lyrics for that song. Add your own `.lrc` file or select another provider in the tray. |
+| **Musixmatch** is greyed out | It needs a Musixmatch API key in `src/main/secrets.ts`. Without one, other sources continue to work seamlessly. |
 | Words light up a little early or late | Use tray → **Timing**. Bluetooth audio usually runs 0.25–0.5 s behind. |
-| Ctrl+Alt+L does nothing | Another app already uses that shortcut, and the tray then shows no shortcut next to the lyrics-screen item. Use the tray item instead. |
+| Ctrl+Alt+L does nothing | Another app already uses that shortcut. Open the lyrics screen via the tray menu. |
 | Touching anything after Ctrl+Alt+L shows the Windows sign-in screen | **Lock Windows When I Come Back** is on. Turn it off in the tray. |
-| **Start with Windows** is greyed out | It only works in the released app, not when running from source. If you move the app folder, turn it off and on again. |
-| Kodama plays but no lyrics follow | Choose tray → **Players → Kodama**. If it still doesn't follow, open the log: every app id Windows reports is written as a `media session: …` line. If your build of Kodama reports an unexpected id (a fork or a renamed exe), start the app with `THEAESTHETICSLYRICS_KODAMA_ID` set to a comma-separated list of case-insensitive name fragments to trust (e.g. `set THEAESTHETICSLYRICS_KODAMA_ID=music-helper`), and it will follow those sessions too. |
-| The words jump back after seeking inside Kodama | Kodama refreshes Windows' media timeline about every 15 seconds and doesn't announce seeks separately, so the lyrics move to the new spot only at its next update. This is Kodama's own behaviour; nothing is wrong with the app. |
-| Album art is missing or arrives late | Windows fetches the player's artwork in its own time (YouTube thumbnails for Kodama can take a few seconds). The app keeps checking for about 10 seconds and also lets you pick your own colours instead. |
+| Ambient Mode doesn't dismiss on mouse move | In Ambient Mode, mouse movements and media scrubbing are expected; press **Esc** or click the exit button to return to the desktop. |
 
 - **Log:** `%APPDATA%\theaestheticslyrics\logs\theaestheticslyrics.log`
 - **Settings:** `%APPDATA%\theaestheticslyrics\settings.json`
 
 ## Build from source
 
-You need Windows 10 or 11 and [Node.js](https://nodejs.org) 22.12 or newer (24 LTS recommended).
+Requires Windows 10 or 11 and [Node.js](https://nodejs.org) 22.12 or newer (24 LTS recommended).
 
 ```powershell
 git clone https://github.com/darshanseenivasakumar/theaestheticslyrics.git
@@ -140,134 +154,28 @@ npm ci
 npm run dev
 ```
 
-The first run downloads Electron.
-
 | Command | What it does |
 |---|---|
 | `npm run dev` | Runs the app with hot reload. |
-| `npm test` | Runs the unit tests (Vitest). |
-| `npm run typecheck` | Runs strict TypeScript for the main process and the pages. |
-| `npm run package` | Builds the portable folder and zip into `release\`. |
+| `npm test` | Runs the unit test suite (Vitest). |
+| `npm run typecheck` | Runs strict TypeScript verification for main and renderer processes. |
+| `npm run build` | Builds the production bundles for Electron main, preload, and renderer. |
+| `npm run package` | Builds the portable Windows application folder and zip into `release\`. |
 | `npm run snapshot` | Renders every style offscreen into `snapshots\*.png`. |
-| `npm run fake-player` | Starts a silent test "player" that shows up in Windows' media controls. |
-| `npm run check:lrclib` | Runs a live check against lrclib.net that prints metadata only. |
+| `npm run fake-player` | Starts a silent test player that registers in Windows media controls. |
+| `npm run check:lrclib` | Runs a live metadata verification check against lrclib.net. |
 | `npm run lyrics:server` | Starts the optional zero-dependency Better Lyrics proxy on `127.0.0.1:8787`. |
-| `npm run icons` | Regenerates the Fluent icon subset and the app icons. |
-
-### Optional Better Lyrics proxy
-
-`server/server.mjs` is a single-file, **zero-dependency** Node proxy for
-[The Better Lyrics API](https://docs.betterlyrics.org). It exists for two cases: a browser
-frontend that needs CORS, and keeping an API key out of the frontend bundle. It is not
-required by the Electron app, whose main process calls the API directly without CORS.
-
-```powershell
-# No extra packages: Node's built-in http + fetch are all it uses.
-npm run lyrics:server
-
-# With a key, or on another port:
-$env:BETTER_LYRICS_API_KEY = "your-key"
-$env:PORT = "8788"
-npm run lyrics:server
-```
-
-| Endpoint | Purpose |
-|---|---|
-| `GET /api/lyrics?song=…&artist=…&album=…&duration=…` | Fetches TTML for one track. Aliases: `s`, `a`, `al`, `d`, `title`, `songName`, `artistName`, `albumName`. |
-| `GET /getLyrics?…` | Same handler, for clients that already use the upstream path. |
-| `GET /health` | `{ "ok": true, "upstream": "…", "apiKey": false }`. |
-
-```powershell
-curl.exe "http://127.0.0.1:8787/api/lyrics?song=E85&artist=Don%20Toliver&album=OCTANE&duration=154"
-```
-
-```js
-const res = await fetch(
-  'http://127.0.0.1:8787/api/lyrics?' +
-    new URLSearchParams({ song: 'E85', artist: 'Don Toliver', album: 'OCTANE', duration: '154' })
-)
-if (!res.ok) throw new Error((await res.json()).message)
-const { ttml } = await res.json() // keep the raw string: its spaces carry the syllable timing
-```
-
-The proxy never crashes on an upstream problem; it maps them to clean statuses:
-
-| Status | Meaning |
-|---|---|
-| `200` | `{ ttml, score? }` — lyrics found. |
-| `400` | Missing `song`/`artist`, or the API rejected the parameters (`422` upstream). |
-| `404` | The song has no lyrics (`404`/negative cache upstream). |
-| `429` | Rate limited; `Retry-After` is passed through when present. |
-| `502` | A cache miss that needs an API key (`401` upstream), or the upstream failed. |
-| `504` | The upstream timed out. |
-
-| Environment variable | Default | Purpose |
-|---|---|---|
-| `HOST` | `127.0.0.1` | Bind address. Keep it local unless you mean to expose it. |
-| `PORT` | `8787` | Port. |
-| `BETTER_LYRICS_API_KEY` | *(empty)* | Sent upstream as `X-API-Key`; never sent to the browser. |
-| `BETTER_LYRICS_API_URL` | `https://api.betterlyrics.org` | Upstream base (self-hosting/testing). |
-| `BETTER_LYRICS_TIMEOUT_MS` | `8000` | Upstream request cap. |
-| `BETTER_LYRICS_CACHE_TTL_MS` | `600000` | In-memory TTL for successful proxy replies. |
-
-To make the desktop app use the proxy too, start it and set the origin before launching:
-
-```powershell
-$env:BETTER_LYRICS_PROXY_URL = "http://127.0.0.1:8787"
-npm run dev
-```
-
-Without `BETTER_LYRICS_PROXY_URL`, the app calls `api.betterlyrics.org` directly and keeps the
-key (`BETTER_LYRICS_API_KEY`, if any) in the main process. The renderer needs **no changes**:
-it already renders `TimedLyrics` received over IPC, so Better Lyrics results show up through
-the same path as every other provider, and the tray's **Lyrics Provider → Better Lyrics** pin
-forces it. The proxy is only the browser-facing door.
-
-### Testing without real music
-
-These switches let you test at any hour without touching your real settings:
-
-| Switch | Effect |
-|---|---|
-| `TAL_PROFILE=<dir>` | Uses a separate folder for settings, cache and log. |
-| `TAL_LYRICS_DIR=<dir>` | Uses a different folder for your own lyrics. |
-| `TAL_NO_LOCK=1` | Logs instead of really locking Windows. |
-| `--open-lock-after=<ms>` | Opens the lyrics screen. |
-| `--return-after=<ms>` | Simulates someone coming back. |
-| `--capture-after=<ms> --capture-file=<png>` | Saves what the lyrics screen shows. |
-| `--capture-colors=<png>` | Saves the Colors window. |
-| `--quit-after=<ms>` | Quits on its own. |
-
-Run `npm run fake-player`, then start the app with the switches above. `tests\fixtures` holds an original test song written for this project.
-
-### Project layout
-
-```
-src/main/       tray app: media bridge, lyrics sources and cache, palette, windows, power
-src/preload/    the only bridge between the sandboxed pages and the app
-src/renderer/   the lyrics screen (four styles) and the Colors window
-src/shared/     types and the IPC contract used by both sides
-resources/      smtc-bridge.ps1 (Windows media sessions → JSON lines) and the icons
-server/         the optional zero-dependency Better Lyrics proxy (server.mjs)
-docs/           screenshots, plus the original design spec and plan
-```
-
-## Contributing
-
-Issues and pull requests are welcome. Please run `npm run typecheck` and `npm test` before opening a pull request.
-
-**Never commit real song lyrics:** tests, fixtures and screenshots use original text only.
+| `npm run icons` | Regenerates the Fluent icon subset and application icons. |
 
 ## Credits
 
 - Inspired by [Verci](https://verci.xyz) for macOS.
-- Lyrics come from [Karalyr](https://karalyr.com), [Better Lyrics](https://docs.betterlyrics.org), [LRCLIB](https://lrclib.net) and NetEase Cloud Music.
-- The font is [Inter](https://rsms.me/inter/) (SIL OFL 1.1).
-- Icons are [Fluent UI System Icons](https://github.com/microsoft/fluentui-system-icons) (MIT) and Segoe UI Emoji.
-- Built with [Electron](https://www.electronjs.org), [electron-vite](https://electron-vite.org) and TypeScript.
-- Third-party licenses are in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+- Lyrics provided by [Karalyr](https://karalyr.com), [Better Lyrics](https://docs.betterlyrics.org), [LRCLIB](https://lrclib.net), and NetEase Cloud Music.
+- Font: [Inter](https://rsms.me/inter/) (SIL OFL 1.1) and Space Mono.
+- Icons: [Fluent UI System Icons](https://github.com/microsoft/fluentui-system-icons) (MIT) and Segoe UI Emoji.
+- Built with [Electron](https://www.electronjs.org), [electron-vite](https://electron-vite.org), and TypeScript.
 
-theaestheticslyrics is an independent project. It isn't affiliated with or endorsed by Verci, Spotify, Apple, Karalyr, Better Lyrics, NetEase, LRCLIB or Kodama. Lyrics belong to their songwriters and publishers, and no lyrics are stored in this repository.
+theaestheticslyrics is an independent open-source project. It is not affiliated with or endorsed by Verci, Spotify, Apple, Karalyr, Better Lyrics, NetEase, LRCLIB or Kodama. Lyrics belong to their respective songwriters and publishers.
 
 ## License
 

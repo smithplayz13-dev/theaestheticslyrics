@@ -7,6 +7,7 @@ import { LockClock } from './lock-clock'
 import { buildModel, msUntilNextWord, type LyricsModel } from './model'
 import { BackgroundManager } from './background'
 import { AmbientPresenter } from './ambient'
+import { RimLightingPresenter } from './rim-lighting'
 import { createStyle } from './styles/registry'
 import type { StageStyle } from './styles/types'
 
@@ -19,6 +20,12 @@ const bgManager = new BackgroundManager({
   layerA: document.getElementById('stage-bg-a')!,
   layerB: document.getElementById('stage-bg-b')!,
   root: document.documentElement
+})
+
+const rimLighting = new RimLightingPresenter({
+  container: document.getElementById('ambient-rim-lighting'),
+  layerA: document.getElementById('rim-layer-a'),
+  layerB: document.getElementById('rim-layer-b')
 })
 
 const ambient = new AmbientPresenter({
@@ -35,6 +42,9 @@ const ambient = new AmbientPresenter({
   playPauseBtn: document.getElementById('ambient-btn-play-pause'),
   setPresentationMode: (m) => {
     document.body.dataset.presentationMode = m
+  },
+  setPresentationState: (s) => {
+    document.body.dataset.presentation = s
   }
 })
 
@@ -149,15 +159,21 @@ function applyPaletteVars(p: Palette): void {
 function applyState(state: StageState): void {
   mode = state.config.mode
   document.body.dataset.mode = mode
+  document.body.dataset.style = state.config.style
   const ambientActive = Boolean(state.config.ambientMode)
+  ambient.setStyle(state.config.style)
   ambient.setAmbientMode(ambientActive)
-  lockClock.setVisible(mode === 'lock' && !ambientActive)
-  palette = state.config.palette
-  applyPaletteVars(palette)
-  bgManager.setPalette(state.backgroundPalette)
+  ambient.setLyrics(state.lyrics, state.track?.durationMs ?? 0)
   ambient.setTrack(state.track)
   ambient.setArtwork(state.artworkUrl ?? null)
   ambient.setPlaying(clock.playing)
+  lockClock.setVisible(mode === 'lock' && !ambientActive && !ambient.isOverlayActive)
+  palette = state.config.palette
+  applyPaletteVars(palette)
+  bgManager.setStyle(state.config.style)
+  bgManager.setPalette(state.backgroundPalette)
+  rimLighting.setSettings(state.config.ambientLighting)
+  rimLighting.setPalette(state.ambientPalette)
   clock.setOffset(state.config.offsetMs)
 
   const sig = signature(state)
@@ -172,10 +188,12 @@ function applyState(state: StageState): void {
     style = createStyle(state.config.style)
     styleId = state.config.style
     style.mount(root)
+    style.setTrack?.(state.track)
     style.setLyrics(model)
   } else if (lyricsChanged) {
     style.setLyrics(model)
   }
+  style.setTrack?.(state.track)
   style.setMode(mode)
   style.setPalette(palette)
   startLoop()
@@ -193,14 +211,15 @@ const FRAME_RATE: Record<ShowOn, { busy: number; idle: number }> = {
 }
 
 function render(songMs: number, wallMs: number): boolean {
-  const isAmbient = ambient.isAmbient
-  ambient.update(songMs)
+  const ambientBusy = ambient.update(songMs)
+  const isAmbient = ambient.isPresentationActive
 
   const W = root.clientWidth || window.innerWidth
   const H = root.clientHeight || window.innerHeight
-  const styleBusy = style?.frame({ songMs, wallMs, width: W, height: H }) ?? false
+  const styleBusy = style?.frame({ songMs, wallMs, width: W, height: H, isAmbient }) ?? false
+  const rimBusy = rimLighting.frame(songMs, wallMs, model, clock.playing)
   if (mode === 'lock' && !isAmbient) lockClock.update(Date.now())
-  return styleBusy || ambient.seeking
+  return styleBusy || ambient.seeking || rimBusy || ambientBusy
 }
 
 function loop(): void {
@@ -217,11 +236,13 @@ function loop(): void {
     return
   }
   // Wait out most of the frame budget, then align the next frame to vsync — but never
-  // sleep through the start of the next word.
+  // sleep through the start of the next word or upcoming instrumental transition.
   let wait = 1000 / fps - (performance.now() - started) - 8
   if (clock.playing) {
     const nextWord = model ? msUntilNextWord(model, songMs) : Number.POSITIVE_INFINITY
-    if (Number.isFinite(nextWord)) wait = Math.min(wait, nextWord - 12)
+    const nextTransition = ambient.msUntilNextTransition(songMs)
+    const nextEvent = Math.min(nextWord, nextTransition)
+    if (Number.isFinite(nextEvent)) wait = Math.min(wait, nextEvent - 12)
   }
   setTimeout(() => requestAnimationFrame(loop), Math.max(0, wait))
 }
@@ -270,8 +291,8 @@ let travelled = 0
 let lastMove: { x: number; y: number; at: number } | null = null
 window.addEventListener('mousemove', (e) => {
   if (mode !== 'lock') return
-  if (ambient.isAmbient) {
-    // When Ambient Mode is active, mouse interaction is expected!
+  if (ambient.isAmbient || ambient.isOverlayActive) {
+    // When Ambient Mode or instrumental gap presentation is active, mouse interaction is expected!
     // Do not dismiss the screen on mouse movements.
     travelled = 0
     lastMove = { x: e.screenX, y: e.screenY, at: e.timeStamp }
@@ -320,6 +341,25 @@ window.addEventListener('keydown', (e) => {
     return
   }
 
+  // Active instrumental gap presentation in normal mode: allows media controls while preserving standard dismiss
+  if (ambient.isOverlayActive) {
+    if (e.code === 'Space') {
+      e.preventDefault()
+      api.controlMedia('play-pause')
+      return
+    }
+    if (e.code === 'MediaTrackNext' || (e.ctrlKey && e.code === 'ArrowRight')) {
+      e.preventDefault()
+      api.controlMedia('next')
+      return
+    }
+    if (e.code === 'MediaTrackPrevious' || (e.ctrlKey && e.code === 'ArrowLeft')) {
+      e.preventDefault()
+      api.controlMedia('previous')
+      return
+    }
+  }
+
   // Not in ambient mode: pressing 'a' or 'A' activates Ambient Mode
   if (e.key === 'a' || e.key === 'A') {
     e.preventDefault()
@@ -345,8 +385,8 @@ for (const type of ['mousedown', 'wheel', 'touchstart'] as const) {
       }
       if (mode !== 'lock') return
       const target = e.target as HTMLElement | null
-      if (target && target.closest('#ambient-enter-btn')) {
-        // Clicked the enter ambient button: do not dismiss!
+      if (target && (target.closest('#ambient-enter-btn') || target.closest('#ambient-view'))) {
+        // Clicked inside ambient player or enter button: do not dismiss!
         return
       }
       api.dismiss({ kind: 'input', detail: `${type} trusted=${e.isTrusted}` })

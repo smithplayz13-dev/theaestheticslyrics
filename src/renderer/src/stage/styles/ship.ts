@@ -224,8 +224,14 @@ export function createShip(): StageStyle {
           z = -40 - 30 * (k - 1)
         }
 
-        // On the lock screen, words dissolve as they rise toward the clock.
-        if (mode === 'lock') opacity *= clamp((focusY + y - H * CLOCK_FADE_TOP) / (H * CLOCK_FADE_SPAN))
+        // On the lock screen, words dissolve as they rise toward the clock (unless ambient mode has hidden the clock).
+        const ambientActive = Boolean(
+          (typeof document !== 'undefined' &&
+            (document.body.dataset.presentationMode === 'ambient' ||
+              document.body.dataset.presentation === 'artwork' ||
+              document.body.dataset.presentation === 'transitioning-to-artwork'))
+        )
+        if (mode === 'lock' && !ambientActive) opacity *= clamp((focusY + y - H * CLOCK_FADE_TOP) / (H * CLOCK_FADE_SPAN))
 
         const top = focusY + y - (m.size * BOX_EM) / 2
         setStyle(n.root, 'transform', `translate3d(${x.toFixed(1)}px, ${top.toFixed(1)}px, ${z.toFixed(1)}px) scale(${scale.toFixed(4)})`)

@@ -4,7 +4,16 @@ import { BrowserWindow, ipcMain } from 'electron'
 import { DEMO_LRC, DEMO_MOMENTS, DEMO_TRACK } from '@shared/demo-song'
 import { IPC, type StageState } from '@shared/ipc'
 import { DEFAULT_PALETTE } from '@shared/palette-defaults'
-import { STYLE_IDS, type Palette, type ShowOn, type StyleId } from '@shared/types'
+import {
+  DEFAULT_AMBIENT_LIGHTING,
+  DEFAULT_AMBIENT_PALETTE,
+  STYLE_IDS,
+  type AmbientLightingPalette,
+  type AmbientLightingSettings,
+  type Palette,
+  type ShowOn,
+  type StyleId
+} from '@shared/types'
 import { makeDirSync } from './dirs'
 import { parseLrc } from './lyrics/lrc'
 import { buildTimedLyrics } from './lyrics/word-timing'
@@ -17,6 +26,8 @@ export interface SnapshotOptions {
   styles?: readonly StyleId[]
   mode?: ShowOn
   palette?: Palette
+  ambientLighting?: AmbientLightingSettings
+  ambientPalette?: AmbientLightingPalette
 }
 
 /**
@@ -64,7 +75,14 @@ export async function runSnapshots(opts: SnapshotOptions): Promise<string[]> {
       const state: StageState = {
         track: DEMO_TRACK,
         lyrics,
-        config: { style, mode: opts.mode ?? 'lock', palette: opts.palette ?? { ...DEFAULT_PALETTE }, offsetMs: 0 }
+        config: {
+          style,
+          mode: opts.mode ?? 'lock',
+          palette: opts.palette ?? { ...DEFAULT_PALETTE },
+          offsetMs: 0,
+          ambientLighting: opts.ambientLighting ?? { ...DEFAULT_AMBIENT_LIGHTING }
+        },
+        ambientPalette: opts.ambientPalette ?? { ...DEFAULT_AMBIENT_PALETTE }
       }
       win.webContents.send(IPC.stageState, state)
       for (const [i, songMs] of DEMO_MOMENTS.entries()) {

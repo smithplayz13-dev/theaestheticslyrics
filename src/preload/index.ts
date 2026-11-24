@@ -29,7 +29,10 @@ const api: LyricsAppApi = {
     set: (role, hex) => ipcRenderer.send(IPC.colorsSet, role, hex),
     setAutoSync: (on) => ipcRenderer.send(IPC.colorsAutoSync, on),
     reset: () => ipcRenderer.send(IPC.colorsReset),
-    onState: (cb) => subscribe(IPC.colorsState, cb)
+    onState: (cb) => subscribe(IPC.colorsState, cb),
+    setAmbientLighting: (patch) => ipcRenderer.send(IPC.ambientSet, patch),
+    resetAmbientLighting: () => ipcRenderer.send(IPC.ambientReset),
+    onTabSelect: (cb) => subscribe(IPC.colorsTab, cb)
   }
 }
 

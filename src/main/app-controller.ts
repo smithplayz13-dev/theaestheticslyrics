@@ -1,7 +1,17 @@
 import { app, globalShortcut, nativeImage, screen, shell } from 'electron'
 import type { ColorsState } from '@shared/ipc'
 import { DEFAULT_COLORS } from '@shared/palette-defaults'
-import type { BackgroundPalette, LyricsStatus, Palette, PlaybackAnchor, TimedLyrics, TrackInfo } from '@shared/types'
+import {
+  DEFAULT_AMBIENT_LIGHTING,
+  type AmbientLightingPalette,
+  type AmbientLightingSettings,
+  type BackgroundPalette,
+  type LyricsStatus,
+  type Palette,
+  type PlaybackAnchor,
+  type TimedLyrics,
+  type TrackInfo
+} from '@shared/types'
 import { lockWorkstation } from './lock'
 import type { Log } from './logger'
 import { BetterLyricsClient } from './lyrics/betterlyrics'
@@ -11,9 +21,12 @@ import { LocalLyrics } from './lyrics/local'
 import { LrclibClient } from './lyrics/lrclib'
 import { MusixmatchProvider } from './lyrics/musixmatch'
 import { NeteaseClient } from './lyrics/netease'
+import { BetterLyricsPortatoClient } from './lyrics/portato'
 import { LyricsService, type LyricsResult } from './lyrics/service'
+import { UnisonClient } from './lyrics/unison'
 import { MUSIXMATCH_API_KEY } from './secrets'
 import { MediaWatcher, type ArtworkEvent } from './media/watcher'
+import { extractAmbientPalette, ambientPaletteFromBackground } from './palette/ambient'
 import { BackgroundPaletteCache, extractBackgroundPalette } from './palette/background'
 import { extractPalette, paletteFromBackground, paletteFromColors } from './palette/extract'
 import type { AppPaths } from './paths'
@@ -65,6 +78,7 @@ export class AppController {
   private providerArtworkUrl: string | null = null
   private readonly bgPaletteCache = new BackgroundPaletteCache()
   private readonly albumPaletteCache = new Map<string, Palette>()
+  private readonly ambientPaletteCache = new Map<string, AmbientLightingPalette>()
   private readonly artUrlCache = new Map<string, string>()
   private health: { ok: boolean; message?: string } = { ok: true }
   private hotkeyOk = false
@@ -103,6 +117,10 @@ export class AppController {
       // Cache-first syllable timing; BETTER_LYRICS_PROXY_URL / BETTER_LYRICS_API_KEY are read
       // in the client, so the tray provider works without any code changes.
       betterLyrics: { client: new BetterLyricsClient({ userAgent: `theaestheticslyrics/${app.getVersion()}` }) },
+      // Better Lyrics Portato: QQ Music word/syllable timing.
+      portato: { client: new BetterLyricsPortatoClient({ userAgent: `theaestheticslyrics/${app.getVersion()}` }) },
+      // Better Lyrics Unison: community-contributed lyrics (richsync/word/line/unsynced).
+      unison: { client: new UnisonClient({ userAgent: `theaestheticslyrics/${app.getVersion()}` }) },
       log: this.log,
       wordLevel: { client: new NeteaseClient(), enabled: () => this.settings.get().wordLevel },
       provider: () => this.settings.get().lyricsProvider
@@ -124,7 +142,10 @@ export class AppController {
       state: () => this.colorsState(),
       setColor: (role, hex) => this.settings.update({ autoSync: false, colors: { ...this.settings.get().colors, [role]: hex } }),
       setAutoSync: (autoSync) => this.settings.update({ autoSync }),
-      reset: () => this.settings.update({ colors: { ...DEFAULT_COLORS } })
+      reset: () => this.settings.update({ colors: { ...DEFAULT_COLORS } }),
+      setAmbientLighting: (patch) =>
+        this.settings.update({ ambientLighting: { ...this.settings.get().ambientLighting, ...patch } }),
+      resetAmbientLighting: () => this.settings.update({ ambientLighting: { ...DEFAULT_AMBIENT_LIGHTING } })
     })
     this.tray = new TrayMenu(this.paths.trayIcon, this.trayActions())
 
@@ -239,7 +260,16 @@ export class AppController {
       this.providerArtworkUrl = result.artworkUrl
     }
     const detail = result.lyrics ? `, ${result.lyrics.lines.length} lines, ${result.lyrics.wordTiming} word timing` : ''
-    this.log(`lyrics: ${result.status}${result.source ? ` (${result.source})` : ''}${detail}`)
+    const sourceLabel =
+      result.attribution?.name ??
+      (result.source === 'portato'
+        ? 'Better Lyrics Portato'
+        : result.source === 'unison'
+          ? 'Unison'
+          : result.source === 'betterlyrics'
+            ? 'Better Lyrics'
+            : result.source)
+    this.log(`lyrics: ${result.status}${sourceLabel ? ` (${sourceLabel})` : ''}${detail}`)
     if (result.status === 'error') this.later(ERROR_RETRY_MS, () => void this.lookup(track, token))
     this.refresh()
   }
@@ -286,6 +316,14 @@ export class AppController {
                 if (extractedBg) {
                   this.albumBgPalette = extractedBg
                   this.bgPaletteCache.set(track.key, extractedBg)
+                }
+                const extractedAmbient = extractAmbientPalette(bitmap, width, height)
+                if (extractedAmbient) {
+                  if (this.ambientPaletteCache.size >= 20) {
+                    const first = this.ambientPaletteCache.keys().next().value
+                    if (first !== undefined) this.ambientPaletteCache.delete(first)
+                  }
+                  this.ambientPaletteCache.set(track.key, extractedAmbient)
                 }
                 this.refresh()
               }
@@ -356,6 +394,14 @@ export class AppController {
         this.albumBgPalette = extractBackgroundPalette(bitmap, width, height)
         if (this.albumBgPalette) this.bgPaletteCache.set(art.key, this.albumBgPalette)
       }
+      const extractedAmbient = extractAmbientPalette(bitmap, width, height)
+      if (extractedAmbient) {
+        if (this.ambientPaletteCache.size >= 20) {
+          const first = this.ambientPaletteCache.keys().next().value
+          if (first !== undefined) this.ambientPaletteCache.delete(first)
+        }
+        this.ambientPaletteCache.set(art.key, extractedAmbient)
+      }
     } catch (err) {
       this.log(`palette: could not read album art (${String(err)})`)
       this.refresh()
@@ -381,6 +427,26 @@ export class AppController {
 
   private readonly onDisplays = (): void => this.refreshTray()
 
+  private ambientPalette(): AmbientLightingPalette {
+    const s = this.settings.get()
+    const al = s.ambientLighting
+    if (al.overrideColor || !al.autoColor) {
+      return {
+        primary: al.primaryColor,
+        secondary: al.secondaryColor
+      }
+    }
+    const cached = this.track ? this.ambientPaletteCache.get(this.track.key) : null
+    if (cached) return cached
+    if (this.albumBgPalette) {
+      return ambientPaletteFromBackground(this.albumBgPalette)
+    }
+    return {
+      primary: al.primaryColor,
+      secondary: al.secondaryColor
+    }
+  }
+
   private palette(): Palette {
     const s = this.settings.get()
     const shouldSync = s.autoSync || Boolean(s.ambientMode)
@@ -393,7 +459,13 @@ export class AppController {
 
   private colorsState(): ColorsState {
     const s = this.settings.get()
-    return { autoSync: s.autoSync, colors: { ...s.colors }, effective: this.palette() }
+    return {
+      autoSync: s.autoSync,
+      colors: { ...s.colors },
+      effective: this.palette(),
+      ambientLighting: { ...s.ambientLighting },
+      effectiveAmbient: this.ambientPalette()
+    }
   }
 
   private refresh(): void {
@@ -409,7 +481,8 @@ export class AppController {
         palette: this.palette(),
         offsetMs: s.offsetMs,
         artworkUrl: effectiveArtworkUrl,
-        backgroundPalette: this.albumBgPalette
+        backgroundPalette: this.albumBgPalette,
+        ambientPalette: this.ambientPalette()
       },
       { playing, hasLyrics }
     )
@@ -449,11 +522,13 @@ export class AppController {
       setShowOn: (showOn) => this.settings.update({ showOn }),
       setDisplay: (displayId) => this.settings.update({ displayId }),
       setAutoSync: (autoSync) => this.settings.update({ autoSync }),
-      editColors: () => this.colors.open(),
+      editColors: (role) => this.colors.open(role === 'ambient' ? 'ambient' : 'lyrics'),
       resetColors: () => this.settings.update({ colors: { ...DEFAULT_COLORS } }),
       showNow: () => void this.stage.openLock('hotkey'),
       setLockOnReturn: (lockOnReturn) => this.settings.update({ lockOnReturn }),
       setAmbientMode: (ambientMode) => this.settings.update({ ambientMode }),
+      setAmbientLighting: (patch) =>
+        this.settings.update({ ambientLighting: { ...this.settings.get().ambientLighting, ...patch } }),
       setOffset: (offsetMs) => this.settings.update({ offsetMs }),
       setWordLevel: (wordLevel) => this.settings.update({ wordLevel }),
       setIdle: (idleMinutes) => this.settings.update({ idleMinutes }),

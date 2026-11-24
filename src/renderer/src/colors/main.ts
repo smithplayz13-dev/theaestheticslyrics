@@ -13,7 +13,7 @@ const ROLES: { role: ColorRole; name: string; hint: string }[] = [
 const root = document.getElementById('colors')!
 root.innerHTML = `
   <header>
-    <h1>Colors</h1>
+    <h1>Lyrics Colors</h1>
     <label class="switch">
       <input type="checkbox" id="auto" />
       <span class="track"><span class="thumb"></span></span>

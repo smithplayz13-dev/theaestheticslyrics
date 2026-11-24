@@ -1,7 +1,15 @@
 import { readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { dirname } from 'node:path'
 import { DEFAULT_COLORS, HEX_COLOR } from '@shared/palette-defaults'
-import { STYLE_IDS, type ColorRole, type ShowOn, type StyleId } from '@shared/types'
+import {
+  DEFAULT_AMBIENT_LIGHTING,
+  STYLE_IDS,
+  type AmbientAnimation,
+  type AmbientLightingSettings,
+  type ColorRole,
+  type ShowOn,
+  type StyleId
+} from '@shared/types'
 import { makeDirSync } from './dirs'
 
 export type IdleMinutes = 0 | 1 | 2 | 5
@@ -16,6 +24,8 @@ export type LyricsProvider =
   | 'musixmatch'
   | 'karalyr'
   | 'betterlyrics'
+  | 'portato'
+  | 'unison'
   | 'lrclib'
   | 'netease'
 
@@ -49,6 +59,8 @@ export interface Settings {
   lyricsProvider: LyricsProvider
   /** Ambient mode: immersive fullscreen lyrics player with dynamic artwork and media controls. */
   ambientMode: boolean
+  /** Native Lumn-inspired ambient rim lighting settings. */
+  ambientLighting: AmbientLightingSettings
 }
 
 export const IDLE_CHOICES: readonly IdleMinutes[] = [0, 1, 2, 5]
@@ -60,6 +72,8 @@ export const LYRICS_PROVIDERS: readonly LyricsProvider[] = [
   'musixmatch',
   'karalyr',
   'betterlyrics',
+  'portato',
+  'unison',
   'lrclib',
   'netease'
 ]
@@ -80,13 +94,53 @@ export const DEFAULT_SETTINGS: Readonly<Settings> = Object.freeze({
   lockOnReturn: false,
   wordLevel: true,
   lyricsProvider: 'auto',
-  ambientMode: false
+  ambientMode: false,
+  ambientLighting: Object.freeze({ ...DEFAULT_AMBIENT_LIGHTING })
 }) as Readonly<Settings>
 
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)
 
 const pickColor = (v: unknown, fallback: string): string =>
   typeof v === 'string' && HEX_COLOR.test(v) ? v.toLowerCase() : fallback
+
+export function sanitizeAmbientLighting(raw: unknown): AmbientLightingSettings {
+  const r = isRecord(raw) ? raw : {}
+  const anim: AmbientAnimation = r.animation === 'static' ? 'static' : DEFAULT_AMBIENT_LIGHTING.animation
+  const intensity =
+    typeof r.intensity === 'number' && Number.isFinite(r.intensity)
+      ? Math.max(0.1, Math.min(1.0, r.intensity))
+      : DEFAULT_AMBIENT_LIGHTING.intensity
+  const thickness =
+    typeof r.thickness === 'number' && Number.isFinite(r.thickness)
+      ? Math.max(10, Math.min(200, Math.round(r.thickness)))
+      : DEFAULT_AMBIENT_LIGHTING.thickness
+  const diffusion =
+    typeof r.diffusion === 'number' && Number.isFinite(r.diffusion)
+      ? Math.max(10, Math.min(100, Math.round(r.diffusion)))
+      : DEFAULT_AMBIENT_LIGHTING.diffusion
+  const colorBalance =
+    typeof r.colorBalance === 'number' && Number.isFinite(r.colorBalance)
+      ? Math.max(0.0, Math.min(1.0, r.colorBalance))
+      : DEFAULT_AMBIENT_LIGHTING.colorBalance
+  const primaryColor = pickColor(r.primaryColor, DEFAULT_AMBIENT_LIGHTING.primaryColor)
+  const secondaryColor = pickColor(r.secondaryColor, DEFAULT_AMBIENT_LIGHTING.secondaryColor)
+  const enabled = typeof r.enabled === 'boolean' ? r.enabled : DEFAULT_AMBIENT_LIGHTING.enabled
+  const autoColor = typeof r.autoColor === 'boolean' ? r.autoColor : DEFAULT_AMBIENT_LIGHTING.autoColor
+  const overrideColor = typeof r.overrideColor === 'boolean' ? r.overrideColor : DEFAULT_AMBIENT_LIGHTING.overrideColor
+
+  return {
+    enabled,
+    animation: anim,
+    intensity,
+    thickness,
+    diffusion,
+    primaryColor,
+    secondaryColor,
+    colorBalance,
+    autoColor,
+    overrideColor
+  }
+}
 
 /**
  * Validates every field independently, so one bad value never resets the rest.
@@ -127,11 +181,17 @@ export function sanitizeSettings(raw: unknown): Settings {
     lyricsProvider: LYRICS_PROVIDERS.includes(r.lyricsProvider as LyricsProvider)
       ? (r.lyricsProvider as LyricsProvider)
       : DEFAULT_SETTINGS.lyricsProvider,
-    ambientMode: typeof r.ambientMode === 'boolean' ? r.ambientMode : DEFAULT_SETTINGS.ambientMode
+    ambientMode: typeof r.ambientMode === 'boolean' ? r.ambientMode : DEFAULT_SETTINGS.ambientMode,
+    ambientLighting: sanitizeAmbientLighting(r.ambientLighting)
   }
 }
 
-const freeze = (s: Settings): Settings => Object.freeze({ ...s, colors: Object.freeze({ ...s.colors }) }) as Settings
+const freeze = (s: Settings): Settings =>
+  Object.freeze({
+    ...s,
+    colors: Object.freeze({ ...s.colors }),
+    ambientLighting: Object.freeze({ ...s.ambientLighting })
+  }) as Settings
 
 export class SettingsStore {
   private current: Settings
@@ -147,7 +207,12 @@ export class SettingsStore {
 
   update(patch: Partial<Settings>): Settings {
     this.current = freeze(
-      sanitizeSettings({ ...this.current, ...patch, colors: { ...this.current.colors, ...patch.colors } })
+      sanitizeSettings({
+        ...this.current,
+        ...patch,
+        colors: { ...this.current.colors, ...patch.colors },
+        ambientLighting: { ...this.current.ambientLighting, ...(patch.ambientLighting ?? {}) }
+      })
     )
     this.persist()
     for (const listener of this.listeners) listener(this.current)

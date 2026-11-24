@@ -1,4 +1,5 @@
 import type { StyleId } from '@shared/types'
+import { createCodestyle } from './codestyle'
 import { createFisheye } from './fisheye'
 import { createShip } from './ship'
 import type { StageStyle } from './types'
@@ -14,5 +15,7 @@ export function createStyle(id: StyleId): StageStyle {
       return createFisheye(true)
     case 'visual':
       return createVisual()
+    case 'codestyle':
+      return createCodestyle()
   }
 }

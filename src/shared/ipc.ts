@@ -1,4 +1,4 @@
-import type { BackgroundPalette, ColorRole, Palette, PlaybackAnchor, ShowOn, StyleId, TimedLyrics, TrackInfo } from './types'
+import type { AmbientLightingPalette, AmbientLightingSettings, BackgroundPalette, ColorRole, Palette, PlaybackAnchor, ShowOn, StyleId, TimedLyrics, TrackInfo } from './types'
 
 export const IPC = {
   stageState: 'stage:state',
@@ -13,7 +13,10 @@ export const IPC = {
   colorsSet: 'colors:set',
   colorsAutoSync: 'colors:auto-sync',
   colorsReset: 'colors:reset',
-  colorsState: 'colors:state'
+  colorsState: 'colors:state',
+  ambientSet: 'ambient:set',
+  ambientReset: 'ambient:reset',
+  colorsTab: 'colors:tab'
 } as const
 
 export interface StageConfig {
@@ -22,6 +25,7 @@ export interface StageConfig {
   palette: Palette
   offsetMs: number
   ambientMode?: boolean
+  ambientLighting: AmbientLightingSettings
 }
 
 /** Everything the stage needs besides the moving playback clock. */
@@ -31,6 +35,7 @@ export interface StageState {
   config: StageConfig
   artworkUrl?: string | null
   backgroundPalette?: BackgroundPalette | null
+  ambientPalette?: AmbientLightingPalette | null
 }
 
 /** Snapshot mode: render exactly this moment, then acknowledge with the same id. */
@@ -58,6 +63,8 @@ export interface ColorsState {
   colors: Record<ColorRole, string>
   /** What the stage is drawing right now (album palette when Auto Sync is on). */
   effective: Palette
+  ambientLighting: AmbientLightingSettings
+  effectiveAmbient: AmbientLightingPalette
 }
 
 export interface StageApi {
@@ -80,6 +87,9 @@ export interface ColorsApi {
   setAutoSync(on: boolean): void
   reset(): void
   onState(cb: (state: ColorsState) => void): () => void
+  setAmbientLighting(patch: Partial<AmbientLightingSettings>): void
+  resetAmbientLighting(): void
+  onTabSelect?(cb: (tab: string) => void): () => void
 }
 
 export interface LyricsAppApi {

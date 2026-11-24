@@ -220,7 +220,7 @@ export function createFisheye(withIcons: boolean): StageStyle {
       lastSignature = ''
     },
 
-    frame({ songMs, wallMs, width: W, height: H }: FrameInfo): boolean {
+    frame({ songMs, wallMs, width: W, height: H, isAmbient }: FrameInfo): boolean {
       if (!host) return false
       const dpr = window.devicePixelRatio || 1
       const w = Math.max(1, Math.round(W * dpr))
@@ -239,9 +239,19 @@ export function createFisheye(withIcons: boolean): StageStyle {
       if (lens?.ok) {
         const strength = 0.42 + 0.025 * Math.sin(wallMs / 2600)
         const lock = mode === 'lock'
+        const ambientActive = Boolean(
+          isAmbient ||
+            (typeof document !== 'undefined' &&
+              (document.body.dataset.presentationMode === 'ambient' ||
+                document.body.dataset.presentation === 'artwork' ||
+                document.body.dataset.presentation === 'transitioning-to-artwork'))
+        )
+        const fadeTop = ambientActive ? 0 : 0.17
+        const fadeSpan = ambientActive ? 0 : (lock ? 0.2 : 0)
+        const opaque = !ambientActive && lock
         lens.draw(
           source,
-          { strength, radius: 0.64, aberration: 0.014, opaque: lock, fadeTop: 0.17, fadeSpan: lock ? 0.2 : 0 },
+          { strength, radius: 0.64, aberration: 0.014, opaque, fadeTop, fadeSpan },
           changed
         )
       }

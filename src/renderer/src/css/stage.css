@@ -82,6 +82,22 @@ body[data-mode='always'] .stage-bg {
   will-change: opacity;
 }
 
+#stage.dimmed {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Presentation States for Lyrics and Ambient Artwork during gaps */
+body:not([data-style='codestyle'])[data-presentation='artwork'] #stage,
+body:not([data-style='codestyle'])[data-presentation='transitioning-to-artwork'] #stage {
+  opacity: 0;
+  pointer-events: none;
+}
+
+body:not([data-style='codestyle'])[data-presentation='transitioning-to-lyrics'] #stage {
+  opacity: 1;
+}
+
 @media (prefers-reduced-motion: reduce) {
   #stage,
   .stage-bg-layer {
@@ -357,10 +373,46 @@ body[data-presentation-mode='ambient'] #stage {
   transition: opacity 0.4s cubic-bezier(0.2, 0, 0, 1), visibility 0.4s;
 }
 
-body[data-presentation-mode='ambient'] .ambient-view {
+body[data-presentation-mode='ambient'] .ambient-view,
+body[data-presentation='artwork'] .ambient-view,
+body[data-presentation='transitioning-to-artwork'] .ambient-view {
   opacity: 1;
   visibility: visible;
   pointer-events: auto;
+}
+
+body[data-presentation='transitioning-to-lyrics'] .ambient-view {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+body[data-presentation='artwork'] .btn-ambient-enter,
+body[data-presentation='transitioning-to-artwork'] .btn-ambient-enter {
+  display: none !important;
+}
+
+body:not([data-presentation-mode='ambient']) .btn-ambient-exit {
+  display: none !important;
+}
+
+body:not([data-presentation-mode='ambient']) .ambient-content {
+  justify-content: center;
+  padding: 40px clamp(24px, 5vw, 80px) 0;
+}
+
+body:not([data-presentation-mode='ambient']) .ambient-left {
+  display: none;
+}
+
+body:not([data-presentation-mode='ambient']) .ambient-right {
+  width: auto;
+  align-items: center;
+}
+
+body:not([data-presentation-mode='ambient']) .ambient-meta {
+  align-items: center;
+  text-align: center;
 }
 
 .ambient-header {
@@ -750,4 +802,66 @@ body[data-presentation-mode='ambient'] .ambient-view {
     transition: none !important;
     animation: none !important;
   }
+}
+
+
+/* ---------- Codestyle Invariant Background Protection ---------- */
+body[data-style='codestyle'] {
+  background: radial-gradient(120% 90% at 50% 42%, #0b0a09 0%, #060607 58%, #000 100%) !important;
+}
+
+body[data-style='codestyle'] .stage-bg,
+body[data-style='codestyle'] .stage-bg-layer {
+  display: none !important;
+}
+
+body[data-style='codestyle'] .ambient-glow,
+body[data-style='codestyle'] .ambient-glow-img,
+body[data-style='codestyle'] .ambient-glow-overlay {
+  display: none !important;
+}
+
+body[data-style='codestyle']::before {
+  display: none !important;
+}
+
+/* Codestyle #stage and root remain visible so the invariant background is never lost */
+body[data-style='codestyle'] #stage,
+body[data-style='codestyle'] #stage.dimmed,
+body[data-style='codestyle'][data-presentation='artwork'] #stage,
+body[data-style='codestyle'][data-presentation='transitioning-to-artwork'] #stage {
+  opacity: 1 !important;
+  pointer-events: auto;
+}
+
+/* In explicit ambient mode for Codestyle, #stage remains full-screen to maintain invariant background */
+body[data-style='codestyle'][data-presentation-mode='ambient'] #stage {
+  position: fixed !important;
+  inset: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  left: 0 !important;
+  top: 0 !important;
+  z-index: 2 !important;
+}
+
+body[data-style='codestyle'][data-presentation-mode='ambient'] .cs-code {
+  width: min(48vw, 720px) !important;
+  max-width: 48vw !important;
+}
+
+/* Codestyle code lines and status fade out during instrumental breaks */
+body[data-style='codestyle'][data-presentation='artwork'] .cs-code,
+body[data-style='codestyle'][data-presentation='transitioning-to-artwork'] .cs-code,
+body[data-style='codestyle'][data-presentation='artwork'] .cs-status,
+body[data-style='codestyle'][data-presentation='transitioning-to-artwork'] .cs-status {
+  opacity: 0 !important;
+  pointer-events: none;
+  transition: opacity 0.5s ease-out;
+}
+
+body[data-style='codestyle'][data-presentation='transitioning-to-lyrics'] .cs-code,
+body[data-style='codestyle'][data-presentation='transitioning-to-lyrics'] .cs-status {
+  opacity: 1 !important;
+  transition: opacity 0.5s ease-in;
 }

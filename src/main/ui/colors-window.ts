@@ -1,7 +1,7 @@
 import { BrowserWindow, ipcMain, screen, type IpcMainEvent, type IpcMainInvokeEvent } from 'electron'
 import { IPC, type ColorsState } from '@shared/ipc'
 import { HEX_COLOR } from '@shared/palette-defaults'
-import type { ColorRole } from '@shared/types'
+import type { AmbientLightingSettings, ColorRole } from '@shared/types'
 import type { Log } from '../logger'
 import { harden, loadPage, secureWebPreferences } from './windows'
 
@@ -17,9 +17,11 @@ export interface ColorsWindowDeps {
   setColor: (role: ColorRole, hex: string) => void
   setAutoSync: (on: boolean) => void
   reset: () => void
+  setAmbientLighting?: (patch: Partial<AmbientLightingSettings>) => void
+  resetAmbientLighting?: () => void
 }
 
-/** Small settings window with the three colour wells and Auto Sync (opened from the tray). */
+/** Settings window with Lyrics Palette controls (opened from the tray). */
 export class ColorsWindow {
   private win: BrowserWindow | null = null
 
@@ -36,13 +38,23 @@ export class ColorsWindow {
     ipcMain.on(IPC.colorsReset, (e: IpcMainEvent) => {
       if (this.fromOwn(e)) deps.reset()
     })
+    ipcMain.on(IPC.ambientSet, (e: IpcMainEvent, patch: unknown) => {
+      if (!this.fromOwn(e)) return
+      if (typeof patch === 'object' && patch !== null && deps.setAmbientLighting) {
+        deps.setAmbientLighting(patch as Partial<AmbientLightingSettings>)
+      }
+    })
+    ipcMain.on(IPC.ambientReset, (e: IpcMainEvent) => {
+      if (this.fromOwn(e)) deps.resetAmbientLighting?.()
+    })
   }
 
-  open(): void {
+  open(tab?: string): void {
     if (this.win && !this.win.isDestroyed()) {
       if (this.win.isMinimized()) this.win.restore()
       this.win.show()
       this.win.focus()
+      if (tab) this.win.webContents.send(IPC.colorsTab, tab)
       return
     }
     const area = screen.getPrimaryDisplay().workArea
@@ -57,7 +69,7 @@ export class ColorsWindow {
       maximizable: false,
       minimizable: false,
       fullscreenable: false,
-      title: 'theaestheticslyrics Colors',
+      title: 'theaestheticslyrics Colors & Lighting',
       icon: this.deps.iconPath,
       backgroundColor: '#1c1c1e',
       autoHideMenuBar: true,
@@ -65,12 +77,19 @@ export class ColorsWindow {
     })
     win.removeMenu()
     harden(win)
-    win.once('ready-to-show', () => win.show())
+    win.once('ready-to-show', () => {
+      win.show()
+      if (tab) win.webContents.send(IPC.colorsTab, tab)
+    })
     win.on('closed', () => {
       if (this.win === win) this.win = null
     })
     this.win = win
-    loadPage(win, 'colors').catch((err: unknown) => this.deps.log(`colors: failed to load (${String(err)})`))
+    loadPage(win, 'colors')
+      .then(() => {
+        if (tab && !win.isDestroyed()) win.webContents.send(IPC.colorsTab, tab)
+      })
+      .catch((err: unknown) => this.deps.log(`colors: failed to load (${String(err)})`))
   }
 
   /** Debug/E2E helper: saves what the Colors window shows. */

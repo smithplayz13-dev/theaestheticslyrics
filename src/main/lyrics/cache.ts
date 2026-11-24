@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto'
 import { readFile, rename, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { makeDir } from '../dirs'
+import type { LyricsSource, SyncQuality } from '@shared/types'
 import type { LyricsProvider } from '../settings'
 import type { LrclibRecord, TrackQuery } from './match'
 import { cleanTitle, normalizeForMatch, primaryArtist } from './normalize'
@@ -17,6 +18,14 @@ export interface CacheEntry {
   musixmatch?: string
   /** Better Lyrics TTML (syllable timing), served before the LRCLIB record on repeats. */
   betterlyrics?: string
+  /** Better Lyrics Portato payload (QRC or TTML), served before the LRCLIB record on repeats. */
+  portato?: string
+  /** Unison payload JSON (richsync, word, line, or unsynced). */
+  unison?: string
+  /** Source provider attribution. */
+  source?: LyricsSource
+  /** Quality tier of synchronization. */
+  syncQuality?: SyncQuality
   /** The word-timing question is settled for this song (entries without it get checked once). */
   wordChecked?: boolean
   artworkUrl?: string

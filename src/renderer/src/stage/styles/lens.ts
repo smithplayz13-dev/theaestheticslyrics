@@ -59,7 +59,7 @@ void main() {
     color.rgb *= mix(1.0, 0.5, smoothstep(0.72, 1.0, r));
     vec2 g = (p / u_radius - vec2(-0.34, 0.4)) * vec2(1.0, 2.2);
     float glint = exp(-dot(g, g) * 30.0) * 0.05 * step(r, 1.0);
-    color = vec4(color.rgb + glint, 1.0);
+    color = vec4(color.rgb + glint, max(color.a, glint * 2.0));
   }
   if (u_fadeSpan > 0.0) {
     // Premultiplied alpha: scaling the whole colour fades toward whatever is behind.

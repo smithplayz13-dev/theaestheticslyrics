@@ -1,4 +1,4 @@
-import type { Palette, ShowOn } from '@shared/types'
+import type { Palette, ShowOn, TrackInfo } from '@shared/types'
 import type { LyricsModel } from '../model'
 
 export interface FrameInfo {
@@ -8,6 +8,8 @@ export interface FrameInfo {
   wallMs: number
   width: number
   height: number
+  /** Whether ambient mode or gap presentation is currently active. */
+  isAmbient?: boolean
 }
 
 /**
@@ -17,6 +19,8 @@ export interface FrameInfo {
 export interface StageStyle {
   mount(root: HTMLElement): void
   setLyrics(model: LyricsModel | null): void
+  /** Optional: styles that draw track-derived artwork can use the current track. */
+  setTrack?(track: TrackInfo | null): void
   setPalette(palette: Palette): void
   setMode(mode: ShowOn): void
   /**
